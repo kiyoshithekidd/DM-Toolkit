@@ -15,6 +15,14 @@ INCLUDES        := include
 ROMFS           := romfs
 
 # Host-only targets (do not require DEVKITPRO)
+ifeq ($(filter-out test srd,$(MAKECMDGOALS)),)
+ifneq ($(MAKECMDGOALS),)
+HOST_ONLY := 1
+endif
+endif
+
+ifdef HOST_ONLY
+
 .PHONY: test srd
 
 srd:
@@ -26,15 +34,7 @@ test: srd
 		-o test_runner
 	@./test_runner
 
-# Only enforce DEVKITPRO when building 3DS targets
-ifneq ($(filter-out test srd,$(MAKECMDGOALS)),)
-  NEED_3DS := 1
-endif
-ifeq ($(MAKECMDGOALS),)
-  NEED_3DS := 1
-endif
-
-ifdef NEED_3DS
+else
 
 ifeq ($(strip $(DEVKITPRO)),)
 $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>devkitPro")
