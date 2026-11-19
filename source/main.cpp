@@ -609,17 +609,78 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
     }
 }
 
+// ── Sprite Atlas Indices (matches gfx/sprites.t3s order) ──────────────
+
+enum SpriteIdx : size_t {
+    SPR_TITLE_BG    = 0,
+    SPR_ICON_FIGHT  = 1,
+    SPR_ICON_MANUAL = 2,
+    SPR_ICON_DICE   = 3,
+    SPR_ICON_RULES  = 4,
+    SPR_ICON_TOOLS  = 5
+};
+
+void drawSprite(C2D_SpriteSheet sheet, size_t idx, float x, float y,
+                float z = 0.5f, float scaleX = 1.0f, float scaleY = 1.0f) {
+    if (sheet && idx < C2D_SpriteSheetCount(sheet)) {
+        C2D_DrawImageAt(C2D_SpriteSheetGetImage(sheet, idx), x, y, z, nullptr, scaleX, scaleY);
+    }
+}
+
+void renderTopTitleSplash(C2D_TextBuf buf, C2D_SpriteSheet sheet) {
+    drawSprite(sheet, SPR_TITLE_BG, 0.0f, 0.0f, 0.1f, 1.0f, 1.0f);
+    // Subtle dark translucent banner near top center for crisp title legibility
+    C2D_DrawRectSolid(0.0f, 8.0f, 0.35f, 400.0f, 52.0f, rgba32(18, 12, 8, 185));
+    C2D_DrawRectSolid(40.0f, 8.0f, 0.40f, 320.0f, 2.0f, theme::GOLD);
+    C2D_DrawRectSolid(40.0f, 58.0f, 0.40f, 320.0f, 2.0f, theme::GOLD);
+    drawTextCentered(buf, "DM's TOOLKIT", Rect{0.0f, 12.0f, 400.0f, 28.0f}, 0.82f, theme::GOLD_BRIGHT, 0.55f);
+    drawTextCentered(buf, "Pocket DM Screen, Fight Tracker & 3D Dice Tray",
+                     Rect{0.0f, 38.0f, 400.0f, 18.0f}, 0.38f, theme::PARCHMENT, 0.55f);
+}
+
+void renderBottomTitleSplash(C2D_TextBuf buf, C2D_SpriteSheet sheet, const AppState& app) {
+    C2D_DrawRectSolid(0.0f, 0.0f, 0.05f, 320.0f, 240.0f, theme::WALNUT_DARK);
+    C2D_DrawRectSolid(10.0f, 10.0f, 0.10f, 300.0f, 220.0f, theme::WALNUT);
+    C2D_DrawRectSolid(12.0f, 12.0f, 0.12f, 296.0f, 216.0f, theme::GOLD_DARK);
+    C2D_DrawRectSolid(14.0f, 14.0f, 0.15f, 292.0f, 212.0f, theme::FELT);
+
+    // 5 golden emblem icons row
+    for (int i = 0; i < 5; ++i) {
+        drawSprite(sheet, SPR_ICON_FIGHT + static_cast<size_t>(i), 48.0f + i * 50.0f, 28.0f, 0.45f, 1.2f, 1.2f);
+    }
+
+    char campBuf[64];
+    std::snprintf(campBuf, sizeof(campBuf), "Active Campaign: %.24s", app.campaign.name.c_str());
+    drawTextCentered(buf, campBuf, Rect{14.0f, 68.0f, 292.0f, 22.0f}, 0.44f, theme::GOLD_BRIGHT, 0.55f);
+
+    char statBuf[80];
+    std::snprintf(statBuf, sizeof(statBuf), "%u Monsters  |  %u Spells  |  %u Entries",
+                  static_cast<unsigned>(app.db.monsterCount()),
+                  static_cast<unsigned>(app.db.spellCount()),
+                  static_cast<unsigned>(app.db.searchEntryCount()));
+    drawTextCentered(buf, statBuf, Rect{14.0f, 94.0f, 292.0f, 20.0f}, 0.36f, theme::PARCHMENT, 0.55f);
+
+    drawButton(buf, Rect{36.0f, 130.0f, 248.0f, 52.0f}, "ENTER DM SCREEN  [A]",
+               theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.50f);
+
+    drawTextCentered(buf, "Tap anywhere or press any button to begin",
+                     Rect{14.0f, 194.0f, 292.0f, 20.0f}, 0.34f, theme::PARCHMENT_ALT, 0.55f);
+}
+
 // ── Bottom Screen Renderers (320x240) ─────────────────────────────────
 
-void drawModeTabs(C2D_TextBuf buf, AppMode active) {
+void drawModeTabs(C2D_TextBuf buf, C2D_SpriteSheet sheet, AppMode active) {
     const char* labels[5] = {"Fight", "Manual", "Dice", "Rules", "Tools"};
     for (int i = 0; i < 5; ++i) {
         Rect r{i * 64.0f, 0.0f, 64.0f, 28.0f};
         bool sel = (static_cast<int>(active) == i);
-        drawButton(buf, r, labels[i],
-                   sel ? theme::GOLD : theme::WALNUT,
-                   theme::WALNUT_DARK,
-                   sel ? theme::INK : theme::PARCHMENT, 0.39f);
+        C2D_DrawRectSolid(r.x, r.y, 0.30f, r.w, r.h, theme::WALNUT_DARK);
+        C2D_DrawRectSolid(r.x + 1.0f, r.y + 1.0f, 0.35f, r.w - 2.0f, r.h - 2.0f,
+                          sel ? theme::GOLD : theme::WALNUT);
+        drawSprite(sheet, SPR_ICON_FIGHT + static_cast<size_t>(i),
+                   r.x + 4.0f, r.y + 6.0f, 0.50f, 0.80f, 0.80f);
+        drawText(buf, labels[i], r.x + 22.0f, r.y + 8.0f, 0.34f,
+                 sel ? theme::INK : theme::PARCHMENT, 0.55f);
     }
 }
 
@@ -939,6 +1000,7 @@ int main(int argc, char** argv) {
     C3D_RenderTarget* botTarget = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
     C2D_TextBuf topBuf = C2D_TextBufNew(8192);
     C2D_TextBuf botBuf = C2D_TextBufNew(4096);
+    C2D_SpriteSheet spriteSheet = C2D_SpriteSheetLoad("romfs:/gfx/sprites.t3x");
 
     AppState app;
     app.rngState = static_cast<uint32_t>(svcGetSystemTick() ^ 0xA5A55A5Au);
@@ -992,7 +1054,11 @@ int main(int argc, char** argv) {
         float tx = static_cast<float>(touch.px);
         float ty = static_cast<float>(touch.py);
 
-        if (tapped && ty <= 28.0f) {
+        if (app.showTitleSplash) {
+            if (tapped || (kDown & (KEY_A | KEY_B | KEY_X | KEY_Y))) {
+                app.showTitleSplash = false;
+            }
+        } else if (tapped && ty <= 28.0f) {
             int tab = std::clamp(static_cast<int>(tx / 64.0f), 0, 4);
             app.mode = static_cast<AppMode>(tab);
             app.fightPanel = FIGHT_PANEL_MAIN;
@@ -1427,24 +1493,39 @@ int main(int argc, char** argv) {
 
         C2D_TargetClear(topTarget, theme::WALNUT_DARK);
         C2D_SceneBegin(topTarget);
-        if (app.mode == MODE_FIGHT)       renderTopFight(topBuf, app);
-        else if (app.mode == MODE_MANUAL) renderTopManual(topBuf, app);
-        else if (app.mode == MODE_DICE)   renderTopDiceTray(topBuf, app);
-        else if (app.mode == MODE_RULES)  renderTopRules(topBuf, app);
-        else                              renderTopTools(topBuf, app);
+        if (app.showTitleSplash) {
+            renderTopTitleSplash(topBuf, spriteSheet);
+        } else if (app.mode == MODE_FIGHT) {
+            renderTopFight(topBuf, app);
+        } else if (app.mode == MODE_MANUAL) {
+            renderTopManual(topBuf, app);
+        } else if (app.mode == MODE_DICE) {
+            renderTopDiceTray(topBuf, app);
+        } else if (app.mode == MODE_RULES) {
+            renderTopRules(topBuf, app);
+        } else {
+            renderTopTools(topBuf, app);
+        }
 
         C2D_TargetClear(botTarget, theme::WALNUT);
         C2D_SceneBegin(botTarget);
-        drawModeTabs(botBuf, app.mode);
-        if (app.mode == MODE_FIGHT)       renderBottomFight(botBuf, app);
-        else if (app.mode == MODE_MANUAL) renderBottomManual(botBuf, app);
-        else if (app.mode == MODE_DICE)   renderBottomDice(botBuf, app);
-        else if (app.mode == MODE_RULES)  renderBottomRules(botBuf, app);
-        else                              renderBottomTools(botBuf, app);
+        if (app.showTitleSplash) {
+            renderBottomTitleSplash(botBuf, spriteSheet, app);
+        } else {
+            drawModeTabs(botBuf, spriteSheet, app.mode);
+            if (app.mode == MODE_FIGHT)       renderBottomFight(botBuf, app);
+            else if (app.mode == MODE_MANUAL) renderBottomManual(botBuf, app);
+            else if (app.mode == MODE_DICE)   renderBottomDice(botBuf, app);
+            else if (app.mode == MODE_RULES)  renderBottomRules(botBuf, app);
+            else                              renderBottomTools(botBuf, app);
 
-        if (app.statusFrames > 0 && !app.statusBanner.empty()) {
-            drawButton(botBuf, Rect{20.0f, 212.0f, 280.0f, 22.0f}, app.statusBanner.c_str(),
-                       theme::FELT, theme::GOLD, theme::WHITE, 0.36f);
+            if (app.statusFrames > 0 && !app.statusBanner.empty()) {
+                Rect toast{16.0f, 206.0f, 288.0f, 26.0f};
+                C2D_DrawRectSolid(toast.x + 2.0f, toast.y + 2.0f, 0.82f, toast.w, toast.h, rgba32(0, 0, 0, 150));
+                C2D_DrawRectSolid(toast.x, toast.y, 0.85f, toast.w, toast.h, theme::GOLD_BRIGHT);
+                C2D_DrawRectSolid(toast.x + 2.0f, toast.y + 2.0f, 0.88f, toast.w - 4.0f, toast.h - 4.0f, theme::FELT);
+                drawTextCentered(botBuf, app.statusBanner.c_str(), toast, 0.38f, theme::WHITE, 0.92f);
+            }
         }
 
         C3D_FrameEnd(0);
@@ -1453,6 +1534,7 @@ int main(int argc, char** argv) {
     app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
     app.saveUserSettings();
 
+    if (spriteSheet) C2D_SpriteSheetFree(spriteSheet);
     C2D_TextBufDelete(topBuf);
     C2D_TextBufDelete(botBuf);
     C2D_Fini();
