@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -47,16 +48,20 @@ struct DieBody {
 
 struct RollHistoryEntry {
     DieShape          shape;
+    int               count;
     RollAdvantageMode advMode;
     int               modifier;
     int               dieA;
     int               dieB;
     int               total;
+    std::vector<int>  rolls;
     std::string       label;
 };
 
 class DiceRoller {
 public:
+    static constexpr int MAX_POOL_DICE = 12;
+
     static int sidesForShape(DieShape s);
     static const char* shapeLabel(DieShape s);
     static Vec3 rotateVec(const Quat& q, const Vec3& v);
@@ -68,16 +73,20 @@ public:
     static void getFaceNormals(DieShape shape, std::vector<Vec3>& outNormals);
 
     void roll(DieShape shape, int modifier, RollAdvantageMode advMode, uint32_t& rngState);
+    void rollPool(DieShape shape, int count, int modifier, RollAdvantageMode advMode, uint32_t& rngState);
     void step(float dt = 1.0f / 60.0f);
     void finishImmediately();
 
     bool isRolling() const;
     DieShape currentShape() const { return activeShape_; }
+    int currentPoolCount() const { return poolCount_; }
+    int activeDieCount() const { return activeCount_; }
     RollAdvantageMode currentAdvMode() const { return activeAdvMode_; }
     int currentModifier() const { return activeModifier_; }
     int lastTotal() const { return lastTotal_; }
-    const DieBody& dieA() const { return dieA_; }
-    const DieBody& dieB() const { return dieB_; }
+    const DieBody& dieA() const { return dice_[0]; }
+    const DieBody& dieB() const { return dice_[1]; }
+    const DieBody& dieAt(int idx) const { return dice_[static_cast<size_t>(idx)]; }
     const std::vector<RollHistoryEntry>& history() const { return history_; }
 
     // Tray bounds in normalized 3D tray coordinates
@@ -85,8 +94,9 @@ public:
     static constexpr float TRAY_HALF_H = 0.90f;
 
 private:
-    DieBody                       dieA_;
-    DieBody                       dieB_;
+    std::array<DieBody, MAX_POOL_DICE> dice_{};
+    int                           activeCount_    = 0;
+    int                           poolCount_      = 1;
     DieShape                      activeShape_    = DIE_D20;
     RollAdvantageMode             activeAdvMode_  = ROLL_NORMAL;
     int                           activeModifier_ = 0;
@@ -94,7 +104,7 @@ private:
     bool                          recorded_       = true;
     std::vector<RollHistoryEntry> history_;
 
-    void spawnDie(DieBody& d, DieShape shape, float offsetX, uint32_t& rngState);
+    void spawnDie(DieBody& d, DieShape shape, float offsetX, float offsetY, uint32_t& rngState);
     void stepDie(DieBody& d, float dt);
     void finalizeRoll();
 };

@@ -1367,7 +1367,7 @@ int main(int argc, char** argv) {
             }
         } else if (app.mode == MODE_DICE) {
             if (kDown & KEY_A || kDown & KEY_X) {
-                app.dice.roll(app.diceShape, app.diceMod, app.diceAdvMode, app.rngState);
+                app.dice.rollPool(app.diceShape, app.diceCount, app.diceMod, app.diceAdvMode, app.rngState);
                 app.sfx.play(SFX_DICE_ROLL);
             } else if (kDown & KEY_L) {
                 app.diceSkinIdx = (app.diceSkinIdx + 1) % DICE_SKIN_COUNT;
@@ -1381,27 +1381,49 @@ int main(int argc, char** argv) {
 
             if (tapped) {
                 for (int i = 0; i < DIE_SHAPE_COUNT; ++i) {
-                    if (Rect{4.0f + i * 44.5f, 34.0f, 42.0f, 38.0f}.contains(tx, ty)) {
+                    if (Rect{4.0f + i * 44.5f, 32.0f, 42.0f, 32.0f}.contains(tx, ty)) {
                         app.diceShape = static_cast<DieShape>(i);
-                        app.dice.roll(app.diceShape, app.diceMod, app.diceAdvMode, app.rngState);
+                        app.dice.rollPool(app.diceShape, app.diceCount, app.diceMod, app.diceAdvMode, app.rngState);
                         app.sfx.play(SFX_DICE_ROLL);
                         break;
                     }
                 }
-                if (Rect{6.0f, 80.0f, 44.0f, 36.0f}.contains(tx, ty)) {
+                const int presets[5] = {1, 2, 4, 6, 8};
+                if (Rect{6.0f, 68.0f, 34.0f, 32.0f}.contains(tx, ty)) {
+                    app.diceCount = std::max(1, app.diceCount - 1);
+                    app.sfx.play(SFX_TAP);
+                } else if (Rect{116.0f, 68.0f, 34.0f, 32.0f}.contains(tx, ty)) {
+                    app.diceCount = std::min(DiceRoller::MAX_POOL_DICE, app.diceCount + 1);
+                    app.sfx.play(SFX_TAP);
+                } else {
+                    for (int i = 0; i < 5; ++i) {
+                        if (Rect{156.0f + i * 32.0f, 68.0f, 30.0f, 32.0f}.contains(tx, ty)) {
+                            app.diceCount = presets[i];
+                            app.sfx.play(SFX_TAP);
+                            break;
+                        }
+                    }
+                }
+
+                if (Rect{6.0f, 104.0f, 44.0f, 32.0f}.contains(tx, ty)) {
                     app.diceMod = std::max(-10, app.diceMod - 1);
-                } else if (Rect{134.0f, 80.0f, 44.0f, 36.0f}.contains(tx, ty)) {
+                    app.sfx.play(SFX_TAP);
+                } else if (Rect{134.0f, 104.0f, 44.0f, 32.0f}.contains(tx, ty)) {
                     app.diceMod = std::min(20, app.diceMod + 1);
-                } else if (Rect{186.0f, 80.0f, 128.0f, 36.0f}.contains(tx, ty)) {
+                    app.sfx.play(SFX_TAP);
+                } else if (Rect{186.0f, 104.0f, 128.0f, 32.0f}.contains(tx, ty)) {
+                    app.diceShape = DIE_D20;
+                    app.diceCount = 1;
                     app.diceAdvMode = static_cast<RollAdvantageMode>((app.diceAdvMode + 1) % 3);
-                } else if (Rect{6.0f, 124.0f, 308.0f, 52.0f}.contains(tx, ty)) {
-                    app.dice.roll(app.diceShape, app.diceMod, app.diceAdvMode, app.rngState);
+                    app.sfx.play(SFX_TAP);
+                } else if (Rect{6.0f, 142.0f, 308.0f, 46.0f}.contains(tx, ty)) {
+                    app.dice.rollPool(app.diceShape, app.diceCount, app.diceMod, app.diceAdvMode, app.rngState);
                     app.sfx.play(SFX_DICE_ROLL);
-                } else if (Rect{6.0f, 184.0f, 150.0f, 44.0f}.contains(tx, ty)) {
+                } else if (Rect{6.0f, 194.0f, 150.0f, 40.0f}.contains(tx, ty)) {
                     app.diceSkinIdx = (app.diceSkinIdx + 1) % DICE_SKIN_COUNT;
                     app.saveUserSettings();
                     app.sfx.play(SFX_TAP);
-                } else if (Rect{164.0f, 184.0f, 150.0f, 44.0f}.contains(tx, ty)) {
+                } else if (Rect{164.0f, 194.0f, 150.0f, 40.0f}.contains(tx, ty)) {
                     app.traySkinIdx = (app.traySkinIdx + 1) % TRAY_SKIN_COUNT;
                     app.saveUserSettings();
                     app.sfx.play(SFX_TAP);

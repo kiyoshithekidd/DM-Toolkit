@@ -189,7 +189,7 @@ void DiceRoller::getFaceNormals(DieShape shape, std::vector<Vec3>& outNormals) {
     }
 }
 
-void DiceRoller::spawnDie(DieBody& d, DieShape shape, float offsetX, uint32_t& rngState) {
+void DiceRoller::spawnDie(DieBody& d, DieShape shape, float offsetX, float offsetY, uint32_t& rngState) {
     d.active        = true;
     d.settled       = false;
     d.shape         = shape;
@@ -197,8 +197,10 @@ void DiceRoller::spawnDie(DieBody& d, DieShape shape, float offsetX, uint32_t& r
     d.result        = static_cast<int>(diceRng(rngState) % static_cast<uint32_t>(d.sides)) + 1;
     if (shape == DIE_D100) d.result = (d.result % 10) * 10; // 00, 10 .. 90
 
-    d.pos           = {offsetX + randFloat(rngState, -0.2f, 0.2f), randFloat(rngState, -0.3f, 0.3f), 0.75f};
-    d.vel           = {randFloat(rngState, -2.6f, 2.6f), randFloat(rngState, -2.0f, 2.0f), randFloat(rngState, -0.4f, 0.8f)};
+    d.pos           = {offsetX + randFloat(rngState, -0.15f, 0.15f),
+                       offsetY + randFloat(rngState, -0.15f, 0.15f),
+                       randFloat(rngState, 0.65f, 0.95f)};
+    d.vel           = {randFloat(rngState, -2.4f, 2.4f), randFloat(rngState, -1.8f, 1.8f), randFloat(rngState, -0.4f, 0.8f)};
     d.angVel        = {randFloat(rngState, 6.0f, 14.0f), randFloat(rngState, 6.0f, 14.0f), randFloat(rngState, 4.0f, 10.0f)};
     d.rot           = normalizeQuat({randFloat(rngState, -1, 1), randFloat(rngState, -1, 1),
                                      randFloat(rngState, -1, 1), randFloat(rngState, -1, 1)});
@@ -214,21 +216,45 @@ void DiceRoller::spawnDie(DieBody& d, DieShape shape, float offsetX, uint32_t& r
 }
 
 void DiceRoller::roll(DieShape shape, int modifier, RollAdvantageMode advMode, uint32_t& rngState) {
+    rollPool(shape, 1, modifier, advMode, rngState);
+}
+
+void DiceRoller::rollPool(DieShape shape, int count, int modifier, RollAdvantageMode advMode, uint32_t& rngState) {
     activeShape_    = shape;
+    poolCount_      = std::clamp(count, 1, MAX_POOL_DICE);
     activeModifier_ = std::clamp(modifier, -10, 20);
-    activeAdvMode_  = (shape == DIE_D20) ? advMode : ROLL_NORMAL;
+    activeAdvMode_  = (shape == DIE_D20 && poolCount_ == 1) ? advMode : ROLL_NORMAL;
     recorded_       = false;
 
+    for (auto& d : dice_) {
+        d.active  = false;
+        d.settled = true;
+    }
+
     if (shape == DIE_D100) {
-        spawnDie(dieA_, DIE_D100, -0.45f, rngState);
-        spawnDie(dieB_, DIE_D10,  0.45f, rngState);
+        poolCount_   = 1;
+        activeCount_ = 2;
+        spawnDie(dice_[0], DIE_D100, -0.45f, 0.0f, rngState);
+        spawnDie(dice_[1], DIE_D10,   0.45f, 0.0f, rngState);
     } else if (activeAdvMode_ != ROLL_NORMAL) {
-        spawnDie(dieA_, DIE_D20, -0.45f, rngState);
-        spawnDie(dieB_, DIE_D20,  0.45f, rngState);
+        activeCount_ = 2;
+        spawnDie(dice_[0], DIE_D20, -0.45f, 0.0f, rngState);
+        spawnDie(dice_[1], DIE_D20,  0.45f, 0.0f, rngState);
     } else {
-        spawnDie(dieA_, shape, 0.0f, rngState);
-        dieB_.active  = false;
-        dieB_.settled = true;
+        activeCount_ = poolCount_;
+        if (activeCount_ == 1) {
+            spawnDie(dice_[0], shape, 0.0f, 0.0f, rngState);
+        } else {
+            int cols = (activeCount_ <= 2) ? 2 : (activeCount_ <= 6 ? 3 : 4);
+            int rows = (activeCount_ + cols - 1) / cols;
+            for (int i = 0; i < activeCount_; ++i) {
+                int c = i % cols;
+                int r = i / cols;
+                float ox = (cols > 1) ? ((static_cast<float>(c) / (cols - 1)) - 0.5f) * 1.6f : 0.0f;
+                float oy = (rows > 1) ? (0.5f - (static_cast<float>(r) / (rows - 1))) * 0.9f : 0.0f;
+                spawnDie(dice_[static_cast<size_t>(i)], shape, ox, oy, rngState);
+            }
+        }
     }
 }
 
@@ -286,21 +312,29 @@ void DiceRoller::stepDie(DieBody& d, float dt) {
 }
 
 void DiceRoller::step(float dt) {
-    stepDie(dieA_, dt);
-    stepDie(dieB_, dt);
+    for (int i = 0; i < activeCount_; ++i) {
+        stepDie(dice_[static_cast<size_t>(i)], dt);
+    }
 
-    // Simple sphere-sphere repulsion when 2 dice are rolling
-    if (dieA_.active && dieB_.active && (!dieA_.settled || !dieB_.settled)) {
-        float dx = dieB_.pos.x - dieA_.pos.x;
-        float dy = dieB_.pos.y - dieA_.pos.y;
-        float dist = std::sqrt(dx * dx + dy * dy);
-        if (dist > 0.001f && dist < 0.55f) {
-            float push = (0.55f - dist) * 0.5f;
-            float nx = dx / dist, ny = dy / dist;
-            dieA_.pos.x -= nx * push;
-            dieA_.pos.y -= ny * push;
-            dieB_.pos.x += nx * push;
-            dieB_.pos.y += ny * push;
+    // Pairwise sphere-sphere repulsion when multiple dice are rolling
+    const float minSep = (activeCount_ <= 2) ? 0.55f : 0.42f;
+    for (int i = 0; i < activeCount_; ++i) {
+        DieBody& a = dice_[static_cast<size_t>(i)];
+        if (!a.active) continue;
+        for (int j = i + 1; j < activeCount_; ++j) {
+            DieBody& b = dice_[static_cast<size_t>(j)];
+            if (!b.active || (a.settled && b.settled)) continue;
+            float dx = b.pos.x - a.pos.x;
+            float dy = b.pos.y - a.pos.y;
+            float dist = std::sqrt(dx * dx + dy * dy);
+            if (dist > 0.001f && dist < minSep) {
+                float push = (minSep - dist) * 0.5f;
+                float nx = dx / dist, ny = dy / dist;
+                a.pos.x -= nx * push;
+                a.pos.y -= ny * push;
+                b.pos.x += nx * push;
+                b.pos.y += ny * push;
+            }
         }
     }
 
@@ -316,44 +350,74 @@ void DiceRoller::finishImmediately() {
 }
 
 bool DiceRoller::isRolling() const {
-    if (dieA_.active && !dieA_.settled) return true;
-    if (dieB_.active && !dieB_.settled) return true;
+    for (int i = 0; i < activeCount_; ++i) {
+        const DieBody& d = dice_[static_cast<size_t>(i)];
+        if (d.active && !d.settled) return true;
+    }
     return false;
 }
 
 void DiceRoller::finalizeRoll() {
     recorded_ = true;
-    int raw = dieA_.result;
+    std::vector<int> rolls;
+    int raw = 0;
+
     if (activeShape_ == DIE_D100) {
-        int tens = dieA_.result; // 0, 10 .. 90
-        int ones = dieB_.result % 10; // 1..9 or 0
+        int tens = dice_[0].result; // 0, 10 .. 90
+        int ones = dice_[1].result % 10; // 1..9 or 0
         raw = tens + ones;
         if (raw == 0) raw = 100;
+        rolls.push_back(raw);
     } else if (activeAdvMode_ == ROLL_ADVANTAGE) {
-        raw = std::max(dieA_.result, dieB_.result);
+        raw = std::max(dice_[0].result, dice_[1].result);
+        rolls.push_back(dice_[0].result);
+        rolls.push_back(dice_[1].result);
     } else if (activeAdvMode_ == ROLL_DISADVANTAGE) {
-        raw = std::min(dieA_.result, dieB_.result);
+        raw = std::min(dice_[0].result, dice_[1].result);
+        rolls.push_back(dice_[0].result);
+        rolls.push_back(dice_[1].result);
+    } else {
+        for (int i = 0; i < activeCount_; ++i) {
+            int r = dice_[static_cast<size_t>(i)].result;
+            rolls.push_back(r);
+            raw += r;
+        }
     }
 
     lastTotal_ = raw + activeModifier_;
 
-    char lbl[64];
+    char lbl[80];
     if (activeShape_ == DIE_D100) {
-        std::snprintf(lbl, sizeof(lbl), "d100 (%d)%+d = %d", raw, activeModifier_, lastTotal_);
+        if (activeModifier_ != 0) {
+            std::snprintf(lbl, sizeof(lbl), "d100 (%d)%+d = %d", raw, activeModifier_, lastTotal_);
+        } else {
+            std::snprintf(lbl, sizeof(lbl), "d100 = %d", lastTotal_);
+        }
     } else if (activeAdvMode_ != ROLL_NORMAL) {
         std::snprintf(lbl, sizeof(lbl), "d20 (%d,%d %s)%+d = %d",
-                      dieA_.result, dieB_.result,
+                      dice_[0].result, dice_[1].result,
                       activeAdvMode_ == ROLL_ADVANTAGE ? "Adv" : "Dis",
                       activeModifier_, lastTotal_);
+    } else if (poolCount_ > 1) {
+        if (activeModifier_ != 0) {
+            std::snprintf(lbl, sizeof(lbl), "%d%s (%d)%+d = %d",
+                          poolCount_, shapeLabel(activeShape_), raw, activeModifier_, lastTotal_);
+        } else {
+            std::snprintf(lbl, sizeof(lbl), "%d%s = %d",
+                          poolCount_, shapeLabel(activeShape_), lastTotal_);
+        }
     } else if (activeModifier_ != 0) {
         std::snprintf(lbl, sizeof(lbl), "%s (%d)%+d = %d",
-                      shapeLabel(activeShape_), dieA_.result, activeModifier_, lastTotal_);
+                      shapeLabel(activeShape_), dice_[0].result, activeModifier_, lastTotal_);
     } else {
         std::snprintf(lbl, sizeof(lbl), "%s = %d", shapeLabel(activeShape_), lastTotal_);
     }
 
-    RollHistoryEntry entry{activeShape_, activeAdvMode_, activeModifier_, dieA_.result, dieB_.result, lastTotal_, lbl};
-    history_.insert(history_.begin(), entry);
+    RollHistoryEntry entry{
+        activeShape_, poolCount_, activeAdvMode_, activeModifier_,
+        dice_[0].result, dice_[1].result, lastTotal_, std::move(rolls), lbl
+    };
+    history_.insert(history_.begin(), std::move(entry));
     if (history_.size() > 8) history_.resize(8);
 }
 
