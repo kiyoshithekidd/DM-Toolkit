@@ -6,6 +6,12 @@
 
 namespace dmtk {
 
+struct UserSettings {
+    int         diceSkinIdx = 0;
+    int         traySkinIdx = 0;
+    std::string lastCampaignSlug;
+};
+
 struct CampaignData {
     std::string                 name;
     std::string                 slug;
@@ -27,15 +33,18 @@ public:
     bool ensureDirectories() const;
     std::string makeSlug(const std::string& name) const;
     std::string campaignPathForSlug(const std::string& slug) const;
+    std::string settingsPath() const { return baseDir_ + "/settings.json"; }
     std::string homebrewDir() const { return baseDir_ + "/homebrew"; }
 
-    // Creates starter_campaign.json if no campaigns exist yet
     bool ensureDefaultCampaign(const SrdDatabase& db);
 
     std::vector<CampaignSummary> listCampaigns() const;
     bool loadCampaign(const std::string& slug, CampaignData& outCampaign, CombatTracker* outFight = nullptr) const;
     bool saveCampaign(const CampaignData& campaign, const CombatTracker* activeFight = nullptr) const;
     bool createCampaign(const std::string& name, CampaignData& outCampaign) const;
+
+    bool loadSettings(UserSettings& outSettings) const;
+    bool saveSettings(const UserSettings& settings) const;
 
 private:
     std::string baseDir_;

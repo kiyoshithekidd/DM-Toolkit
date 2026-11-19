@@ -202,7 +202,20 @@ static void testCampaignPersistenceAndHomebrew(SrdDatabase& db) {
         }
     }
 
-    std::printf("[PASS] CampaignManager & SD Homebrew Gap Override\n");
+    // Test UserSettings persistence (settings.json)
+    UserSettings usOut;
+    usOut.diceSkinIdx      = 3;
+    usOut.traySkinIdx      = 2;
+    usOut.lastCampaignSlug = "starter_campaign";
+    assert(mgr.saveSettings(usOut));
+
+    UserSettings usIn;
+    assert(mgr.loadSettings(usIn));
+    assert(usIn.diceSkinIdx == 3);
+    assert(usIn.traySkinIdx == 2);
+    assert(usIn.lastCampaignSlug == "starter_campaign");
+
+    std::printf("[PASS] CampaignManager, UserSettings (settings.json) & SD Homebrew Gap Override\n");
 }
 
 int main() {

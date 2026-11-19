@@ -410,4 +410,47 @@ bool CampaignManager::ensureDefaultCampaign(const SrdDatabase& db) {
     return saveCampaign(starter, nullptr);
 }
 
+bool CampaignManager::saveSettings(const UserSettings& settings) const {
+    ensureDirectories();
+    std::string finalPath = settingsPath();
+    std::string tmpPath   = finalPath + ".tmp";
+
+    FILE* fp = std::fopen(tmpPath.c_str(), "wb");
+    if (!fp) return false;
+
+    std::fprintf(fp, "{\n");
+    std::fprintf(fp, "  \"dice_skin\": %d,\n", settings.diceSkinIdx);
+    std::fprintf(fp, "  \"tray_skin\": %d,\n", settings.traySkinIdx);
+    std::fprintf(fp, "  \"last_campaign\": \"%s\"\n", escapeJson(settings.lastCampaignSlug).c_str());
+    std::fprintf(fp, "}\n");
+    std::fclose(fp);
+
+    std::remove(finalPath.c_str());
+    return std::rename(tmpPath.c_str(), finalPath.c_str()) == 0;
+}
+
+bool CampaignManager::loadSettings(UserSettings& outSettings) const {
+    FILE* fp = std::fopen(settingsPath().c_str(), "rb");
+    if (!fp) return false;
+
+    std::fseek(fp, 0, SEEK_END);
+    long sz = std::ftell(fp);
+    if (sz <= 0 || sz > 16 * 1024) {
+        std::fclose(fp);
+        return false;
+    }
+    std::fseek(fp, 0, SEEK_SET);
+    std::string content(static_cast<size_t>(sz), '\0');
+    if (std::fread(&content[0], 1, content.size(), fp) != content.size()) {
+        std::fclose(fp);
+        return false;
+    }
+    std::fclose(fp);
+
+    outSettings.diceSkinIdx      = std::clamp(jInt(content, "dice_skin", 0), 0, 16);
+    outSettings.traySkinIdx      = std::clamp(jInt(content, "tray_skin", 0), 0, 16);
+    outSettings.lastCampaignSlug = jStr(content, "last_campaign", "");
+    return true;
+}
+
 } // namespace dmtk
