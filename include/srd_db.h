@@ -62,6 +62,7 @@ struct HomebrewMonster {
     std::string defenses;
     std::string sensesLang;
     std::vector<HomebrewAction> actions;
+    bool        fromOnDevice = false;
 };
 
 struct HomebrewSpell {
@@ -76,6 +77,7 @@ struct HomebrewSpell {
     std::string duration = "Instantaneous";
     std::string classes = "Wizard";
     std::string body;
+    bool        fromOnDevice = false;
 };
 
 struct MonsterView {
@@ -151,6 +153,9 @@ class SrdDatabase {
 public:
     bool loadFromFile(const char* path);
     int  loadHomebrewDir(const char* dirPath);
+    int  reloadHomebrewDir(const char* dirPath);
+    bool saveHomebrewMonster(const HomebrewMonster& mon, const char* homebrewDir);
+    bool saveHomebrewSpell(const HomebrewSpell& sp, const char* homebrewDir);
 
     bool isLoaded() const { return loaded_; }
     uint32_t monsterCount() const;
@@ -199,7 +204,7 @@ private:
     static int  scoreNameMatch(const char* normName, uint32_t nameMask,
                                const char* normQuery, size_t qLen, uint32_t qMask);
     bool hasHomebrewOverride(const char* normName) const;
-    void parseHomebrewJsonFile(const std::string& filePath);
+    void parseHomebrewJsonFile(const std::string& filePath, bool isOnDeviceFile);
 };
 
 } // namespace dmtk
