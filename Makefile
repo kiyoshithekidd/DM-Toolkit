@@ -100,6 +100,11 @@ all: $(BUILD) $(DEPSDIR)
 $(BUILD):
 	@mkdir -p $@
 
+ifneq ($(DEPSDIR),$(BUILD))
+$(DEPSDIR):
+	@mkdir -p $@
+endif
+
 generate: $(BUILD)
 	@bannertool makesmdh -s "$(APP_TITLE)" -l "$(APP_DESCRIPTION)" -p "$(APP_AUTHOR)" -i "$(ICON)" -o "$(BUILD)/icon.bin"
 	@bannertool makebanner -i "gfx/banner.png" -a "gfx/banner.wav" -o "$(BUILD)/banner.bnr"
