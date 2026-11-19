@@ -1520,8 +1520,11 @@ int main(int argc, char** argv) {
             else                              renderBottomTools(botBuf, app);
 
             if (app.statusFrames > 0 && !app.statusBanner.empty()) {
-                drawButton(botBuf, Rect{20.0f, 212.0f, 280.0f, 22.0f}, app.statusBanner.c_str(),
-                           theme::FELT, theme::GOLD, theme::WHITE, 0.36f);
+                Rect toast{16.0f, 206.0f, 288.0f, 26.0f};
+                C2D_DrawRectSolid(toast.x + 2.0f, toast.y + 2.0f, 0.82f, toast.w, toast.h, rgba32(0, 0, 0, 150));
+                C2D_DrawRectSolid(toast.x, toast.y, 0.85f, toast.w, toast.h, theme::GOLD_BRIGHT);
+                C2D_DrawRectSolid(toast.x + 2.0f, toast.y + 2.0f, 0.88f, toast.w - 4.0f, toast.h - 4.0f, theme::FELT);
+                drawTextCentered(botBuf, app.statusBanner.c_str(), toast, 0.38f, theme::WHITE, 0.92f);
             }
         }
 
