@@ -6,10 +6,11 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 
 * **Fight Tracker (Home Screen):**
   * Dual-column top screen: live Initiative Ladder (round counter, HP bars, condition badges) on the left and the selected monster's full stat block and attacks on the right.
-  * One-handed bottom touchscreen controls: big `-10 / -5 / -1 / +1 / +5` HP buttons, 15-condition toggle grid (`Blinded`, `Poisoned`, `Prone`, `Stunned`, etc.), `Init- / Init+` overrides for physical table rolls, mid-fight `[+ Monster]` additions, 1-tap **Combat Rules** drawer, and `[Roll Loot]` on end-fight.
-* **Monster Manual:**
+  * One-handed bottom touchscreen controls: big `-10 / -5 / -1 / +1 / +5` HP buttons, **Custom HP Numpad** for exact damage/healing values, **1-Tap `[Roll Atk]`** to roll the active monster's primary attack straight into the 3D Dice Tray, 15-condition toggle grid (`Blinded`, `Poisoned`, `Prone`, `Stunned`, etc.), `Init- / Init+` overrides, mid-fight `[+ Monster]` additions, 1-tap **Combat Rules** drawer, and `[Roll Loot]` on end-fight.
+* **Monster Manual & Encounter Prep Builder:**
   * All **334 SRD 5.1 monsters** with full stat blocks, traits, actions, reactions, and legendary actions.
-  * Instant always-live bottom-screen QWERTY search (~20-30 us) plus **Monster Type** and **CR** filter pills, with a 1-tap `[+ Fight]` button on every row.
+  * Instant always-live bottom-screen QWERTY search (~20-30 us) plus **Monster Type** and **CR** filter pills, with 1-tap `[+Fgt]` (drop straight into live combat) and `[+Prep]` (add to Encounter Builder draft).
+  * **In-App Encounter Builder** (`Tools -> Prep Builder`): adjust monster quantities, inspect total base XP, save named encounters directly into your campaign, or launch the draft immediately.
 * **3D Physics-Feel Dice Roller with Custom Skins:**
   * Live 3D tumbling polyhedral dice (`d4`, `d6`, `d8`, `d10`, `d12`, `d20`, `d100`) with felt floor bounces, tray wall rebounds, modifiers (`-10` to `+20`), dual-die **Advantage / Disadvantage**, and roll history.
   * **5 Dice Skins:** *Royal Gold* (default), *Obsidian Gold*, *Crimson Ruby*, *Arcane Sapphire*, and *Ivory Bone*.
@@ -20,8 +21,9 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 * **Tabletop Generators:**
   * **Random Encounter Generator** tuned to active campaign party level, party size, 8 terrains, and SRD XP difficulty thresholds, with 1-tap `[Send to Fight Tracker]`.
   * **NPC Generator** (name, ancestry, occupation, roleplay quirk) and **Loot Generator** (individual pocket coins or full treasure hoards with gems and SRD magic items).
-* **Multi-Campaign Saves & SD Homebrew Overlay:**
+* **Multi-Campaign Saves, Persistent Settings & SD Homebrew Overlay:**
   * One atomic JSON save file per campaign in `sdmc:/3ds/DM_Toolkit/campaigns/` (party roster, preplanned encounters, and auto-saved active fight).
+  * Automatic user preference persistence (`sdmc:/3ds/DM_Toolkit/settings.json`) remembering your chosen Dice Skin, Tray Skin, and last opened campaign.
   * Optional SD card overlay in `sdmc:/3ds/DM_Toolkit/homebrew/*.json` to add custom monsters and spells (automatically superseding matching `[Non-SRD]` stubs).
 
 ## Controls (Nintendo 3DS)

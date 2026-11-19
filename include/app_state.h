@@ -5,6 +5,7 @@
 #include "dice_roller.h"
 #include "generators.h"
 #include "srd_db.h"
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -22,7 +23,8 @@ enum AppMode : uint8_t {
 enum FightSubPanel : uint8_t {
     FIGHT_PANEL_MAIN        = 0,
     FIGHT_PANEL_CONDITIONS  = 1,
-    FIGHT_PANEL_END_CONFIRM = 2
+    FIGHT_PANEL_END_CONFIRM = 2,
+    FIGHT_PANEL_CUSTOM_HP   = 3
 };
 
 struct AppState {
@@ -37,12 +39,20 @@ struct AppState {
     DiceRoller                   dice;
     uint32_t                     rngState = 0x5EEDBEEFu;
 
-    // Dice & Tray skin customization (0 = Royal Gold / Emerald Felt defaults)
+    // Dice & Tray skin customization (persisted in settings.json)
     int               diceSkinIdx = 0;
     int               traySkinIdx = 0;
     DieShape          diceShape   = DIE_D20;
     int               diceMod     = 0;
     RollAdvantageMode diceAdvMode = ROLL_NORMAL;
+
+    // Custom HP Numpad buffer (Issue #5)
+    int customHpValue = 0;
+
+    // Encounter Builder draft (Issue #3)
+    SavedEncounter draftEncounter;
+    int            draftSelectedIdx = 0;
+    bool           encBuilderView   = false; // Toggle between Random Gen and Prep Builder in Tools[0]
 
     // Monster Manual search & filters
     std::string            monsterQuery;
@@ -66,17 +76,17 @@ struct AppState {
     bool combatRulesDrawerOpen = false;
     int  drawerRuleIndex       = 0;
 
-    // Tools & Campaign state (0 = Enc Gen, 1 = NPC/Loot, 2 = Party, 3 = Campaigns, 4 = Legal)
-    int                 toolsSubTab     = 0;
+    // Tools & Campaign state (0 = Enc Gen/Prep, 1 = NPC/Loot, 2 = Party, 3 = Saves, 4 = Legal)
+    int                 toolsSubTab      = 0;
     int                 partySelectedIdx = 0;
-    TerrainType         genTerrain      = TERRAIN_FOREST;
-    EncounterDifficulty genDifficulty   = DIFF_MEDIUM;
+    TerrainType         genTerrain       = TERRAIN_FOREST;
+    EncounterDifficulty genDifficulty    = DIFF_MEDIUM;
     SavedEncounter      lastGenEncounter;
     GeneratedNpc        lastGenNpc;
     GeneratedLoot       lastGenLoot;
-    bool                hasGenEncounter = false;
-    bool                hasGenNpc       = false;
-    bool                hasGenLoot      = false;
+    bool                hasGenEncounter  = false;
+    bool                hasGenNpc        = false;
+    bool                hasGenLoot       = false;
 
     std::string statusBanner;
     int         statusFrames = 0;
@@ -84,6 +94,27 @@ struct AppState {
     void setStatus(const std::string& msg, int frames = 120) {
         statusBanner = msg;
         statusFrames = frames;
+    }
+
+    void addMonsterToDraft(uint16_t monsterId) {
+        for (auto& s : draftEncounter.slots) {
+            if (s.monsterId == monsterId) {
+                if (s.count < 20) ++s.count;
+                return;
+            }
+        }
+        if (draftEncounter.slots.size() < 12) {
+            draftEncounter.slots.push_back({monsterId, 1});
+            draftSelectedIdx = static_cast<int>(draftEncounter.slots.size()) - 1;
+        }
+    }
+
+    void saveUserSettings() const {
+        UserSettings s;
+        s.diceSkinIdx      = diceSkinIdx;
+        s.traySkinIdx      = traySkinIdx;
+        s.lastCampaignSlug = campaign.slug;
+        campaignMgr.saveSettings(s);
     }
 
     void refreshMonsterSearch() {
