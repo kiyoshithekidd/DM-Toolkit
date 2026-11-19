@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "app_state.h"
+#include "dice_view.h"
 #include "ui_theme.h"
 
 using namespace dmtk;
@@ -39,13 +40,12 @@ void drawTextCentered(C2D_TextBuf buf, const char* str, const Rect& r,
 }
 
 void drawButton(C2D_TextBuf buf, const Rect& r, const char* label,
-                uint32_t bg, uint32_t border, uint32_t fg, float scale = 0.42f) {
+                uint32_t bg, uint32_t border, uint32_t fg, float scale = 0.40f) {
     C2D_DrawRectSolid(r.x, r.y, 0.3f, r.w, r.h, border);
     C2D_DrawRectSolid(r.x + 1.0f, r.y + 1.0f, 0.35f, r.w - 2.0f, r.h - 2.0f, bg);
     drawTextCentered(buf, label, r, scale, fg, 0.55f);
 }
 
-// Simple word-wrapper for fixed-width columns on the 3DS top screen
 std::vector<std::string> wrapLines(const std::string& text, size_t maxChars) {
     std::vector<std::string> lines;
     if (text.empty() || maxChars < 4) return lines;
@@ -96,14 +96,9 @@ bool openSystemKeyboard(std::string& inOut, int maxChars, const char* hint) {
 
 // ── Always-Live Bottom Screen QWERTY Keypad ───────────────────────────
 
-static const char* kQwertyRows[3] = {
-    "QWERTYUIOP",
-    "ASDFGHJKL",
-    "ZXCVBNM"
-};
+static const char* kQwertyRows[3] = {"QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"};
 
 bool handleQwertyTouch(float tx, float ty, std::string& query) {
-    // Keypad occupies y = 166..238
     if (ty < 166.0f || ty > 238.0f) return false;
     int row = static_cast<int>((ty - 166.0f) / 24.0f);
     if (row < 0 || row > 2) return false;
@@ -117,23 +112,18 @@ bool handleQwertyTouch(float tx, float ty, std::string& query) {
         Rect r{startX + i * keyW, 166.0f + row * 24.0f, keyW - 2.0f, 22.0f};
         if (r.contains(tx, ty)) {
             if (query.size() < 24) {
-                char ch = static_cast<char>(keys[i] - 'A' + 'a');
-                query.push_back(ch);
+                query.push_back(static_cast<char>(keys[i] - 'A' + 'a'));
             }
             return true;
         }
     }
 
     if (row == 2) {
-        Rect rSpace{220.0f, 214.0f, 44.0f, 22.0f};
-        Rect rDel{266.0f, 214.0f, 46.0f, 22.0f};
-        if (rSpace.contains(tx, ty)) {
-            if (!query.empty() && query.back() != ' ' && query.size() < 24) {
-                query.push_back(' ');
-            }
+        if (Rect{220.0f, 214.0f, 44.0f, 22.0f}.contains(tx, ty)) {
+            if (!query.empty() && query.back() != ' ' && query.size() < 24) query.push_back(' ');
             return true;
         }
-        if (rDel.contains(tx, ty)) {
+        if (Rect{266.0f, 214.0f, 46.0f, 22.0f}.contains(tx, ty)) {
             if (!query.empty()) query.pop_back();
             return true;
         }
@@ -171,8 +161,6 @@ void renderMonsterStatBlock(C2D_TextBuf buf, const SrdDatabase& db, const Monste
 
     float cy = y + 27.0f;
     char lineBuf[128];
-
-    // Vitals bar
     std::snprintf(lineBuf, sizeof(lineBuf), "AC %u  |  HP %u (%s)  |  %s",
                   static_cast<unsigned>(mv.armorClass),
                   static_cast<unsigned>(mv.hitPoints),
@@ -181,7 +169,6 @@ void renderMonsterStatBlock(C2D_TextBuf buf, const SrdDatabase& db, const Monste
     drawText(buf, lineBuf, x + 6.0f, cy, 0.36f, theme::CRIMSON_DARK);
     cy += 14.0f;
 
-    // 6 Ability scores compact strip
     std::snprintf(lineBuf, sizeof(lineBuf), "STR %+d  DEX %+d  CON %+d  INT %+d  WIS %+d  CHA %+d",
                   abilityModifier(mv.strScore), abilityModifier(mv.dexScore),
                   abilityModifier(mv.conScore), abilityModifier(mv.intScore),
@@ -192,7 +179,6 @@ void renderMonsterStatBlock(C2D_TextBuf buf, const SrdDatabase& db, const Monste
     C2D_DrawRectSolid(x + 4.0f, cy, 0.25f, w - 8.0f, 1.0f, theme::PARCHMENT_EDGE);
     cy += 4.0f;
 
-    // Build scrollable text body
     std::vector<std::string> lines;
     size_t maxChars = compact ? 34 : 62;
 
@@ -237,7 +223,6 @@ void renderMonsterStatBlock(C2D_TextBuf buf, const SrdDatabase& db, const Monste
 }
 
 void renderTopFight(C2D_TextBuf buf, const AppState& app) {
-    // Left Column (0..176): Initiative Ladder
     C2D_DrawRectSolid(0.0f, 0.0f, 0.1f, 176.0f, 240.0f, theme::WALNUT_DARK);
     C2D_DrawRectSolid(0.0f, 0.0f, 0.2f, 176.0f, 24.0f, theme::WALNUT);
 
@@ -274,19 +259,16 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
             C2D_DrawRectSolid(2.0f, ry, 0.2f, 172.0f, 28.0f, border);
             C2D_DrawRectSolid(3.0f, ry + 1.0f, 0.25f, 170.0f, 26.0f, bg);
 
-            // Init badge
             Rect ib{5.0f, ry + 3.0f, 24.0f, 22.0f};
             char initStr[8];
             std::snprintf(initStr, sizeof(initStr), "%d", c.initRoll);
             drawButton(buf, ib, initStr, c.isPlayer ? theme::PLAYER_TAG : theme::WALNUT,
                        theme::GOLD_DARK, theme::WHITE, 0.40f);
 
-            // Name
             char nameStr[24];
             std::snprintf(nameStr, sizeof(nameStr), "%s%.16s", isTurn ? ">" : "", c.displayName.c_str());
             drawText(buf, nameStr, 32.0f, ry + 2.0f, 0.38f, dead ? theme::INK_MUTED : theme::INK);
 
-            // HP or Party tag + Conditions
             if (c.isPlayer) {
                 char pinfo[24];
                 std::snprintf(pinfo, sizeof(pinfo), "PARTY  AC %u", static_cast<unsigned>(c.armorClass));
@@ -303,7 +285,6 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
                 drawText(buf, hpStr, 100.0f, ry + 14.0f, 0.33f, theme::INK);
             }
 
-            // Up to 2 compact condition badges on the right edge
             if (c.conditionsMask != 0) {
                 int drawn = 0;
                 for (int b = 0; b < CONDITION_COUNT && drawn < 2; ++b) {
@@ -317,7 +298,6 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
         }
     }
 
-    // Right Column (178..400): Combat Rules Drawer OR Selected Monster Stat Block
     if (app.combatRulesDrawerOpen) {
         C2D_DrawRectSolid(178.0f, 0.0f, 0.15f, 222.0f, 240.0f, theme::PARCHMENT);
         C2D_DrawRectSolid(178.0f, 0.0f, 0.2f, 222.0f, 24.0f, theme::FELT);
@@ -350,7 +330,7 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
             std::snprintf(pbuf, sizeof(pbuf), "Party Hero  |  AC %u  |  Init %+d",
                           static_cast<unsigned>(selC.armorClass), static_cast<int>(selC.initBonus));
             drawText(buf, pbuf, 186.0f, 36.0f, 0.38f, theme::INK);
-            drawText(buf, "Use [-Init / +Init] below if", 186.0f, 64.0f, 0.36f, theme::INK_MUTED);
+            drawText(buf, "Use [Init- / Init+] below if", 186.0f, 64.0f, 0.36f, theme::INK_MUTED);
             drawText(buf, "the player rolled physical dice.", 186.0f, 80.0f, 0.36f, theme::INK_MUTED);
         }
     } else {
@@ -384,35 +364,177 @@ void renderTopManual(C2D_TextBuf buf, const AppState& app) {
     }
 }
 
+void renderSpellCard(C2D_TextBuf buf, const SpellView& sv, int scrollLine, const char* aliasBanner = nullptr) {
+    C2D_DrawRectSolid(0.0f, 0.0f, 0.1f, 400.0f, 240.0f, theme::PARCHMENT);
+    C2D_DrawRectSolid(0.0f, 0.0f, 0.2f, 400.0f, 26.0f, theme::SPELL_BLUE);
+
+    char hdr[72];
+    if (sv.level == 0) {
+        std::snprintf(hdr, sizeof(hdr), "%.28s  (Cantrip %s)", sv.name, sv.school);
+    } else {
+        std::snprintf(hdr, sizeof(hdr), "%.28s  (Lv %u %s)", sv.name, static_cast<unsigned>(sv.level), sv.school);
+    }
+    drawText(buf, hdr, 8.0f, 5.0f, 0.46f, theme::WHITE);
+
+    float cy = 30.0f;
+    if (aliasBanner && aliasBanner[0]) {
+        C2D_DrawRectSolid(6.0f, cy, 0.2f, 388.0f, 16.0f, theme::AMBER_BG);
+        drawText(buf, aliasBanner, 10.0f, cy + 2.0f, 0.34f, theme::AMBER_HDR);
+        cy += 18.0f;
+    }
+
+    char meta1[96], meta2[96];
+    std::snprintf(meta1, sizeof(meta1), "Time: %s  |  Range: %s", sv.castingTime, sv.range);
+    std::snprintf(meta2, sizeof(meta2), "Duration: %s%s  |  Classes: %s",
+                  sv.duration, sv.concentration ? " (Conc)" : "", sv.classes);
+    drawText(buf, meta1, 8.0f, cy, 0.35f, theme::CRIMSON_DARK); cy += 13.0f;
+    drawText(buf, meta2, 8.0f, cy, 0.35f, theme::INK_MUTED); cy += 14.0f;
+    C2D_DrawRectSolid(6.0f, cy, 0.25f, 388.0f, 1.0f, theme::PARCHMENT_EDGE);
+    cy += 4.0f;
+
+    std::string full = std::string("Components: ") + sv.components + "\n\n" + sv.body;
+    auto lines = wrapLines(full, 62);
+    int st = std::max(0, std::min(scrollLine, std::max(0, static_cast<int>(lines.size()) - 1)));
+    for (size_t i = static_cast<size_t>(st); i < lines.size() && cy < 228.0f; ++i) {
+        drawText(buf, lines[i].c_str(), 8.0f, cy, 0.36f, theme::INK);
+        cy += 13.5f;
+    }
+}
+
 void renderTopRules(C2D_TextBuf buf, const AppState& app) {
     C2D_DrawRectSolid(0.0f, 0.0f, 0.1f, 400.0f, 240.0f, theme::PARCHMENT);
     if (app.ruleResults.empty()) {
-        drawText(buf, "No matching rules found.", 24.0f, 96.0f, 0.50f, theme::INK_MUTED);
+        drawText(buf, "No matching SRD entries found.", 24.0f, 96.0f, 0.50f, theme::INK_MUTED);
         return;
     }
-    int idx = std::clamp(app.ruleListCursor, 0, static_cast<int>(app.ruleResults.size()) - 1);
-    RuleView rv{};
-    if (app.db.getRule(app.ruleResults[static_cast<size_t>(idx)].recordId, rv)) {
-        C2D_DrawRectSolid(0.0f, 0.0f, 0.2f, 400.0f, 26.0f, rv.isCondition ? theme::COND_BADGE : theme::FELT);
-        char hdr[64];
-        std::snprintf(hdr, sizeof(hdr), "%s  [%s]", rv.name, rv.category);
-        drawText(buf, hdr, 8.0f, 5.0f, 0.48f, theme::WHITE);
 
-        auto lines = wrapLines(rv.body, 60);
-        int st = std::max(0, std::min(app.ruleTopScroll, std::max(0, static_cast<int>(lines.size()) - 1)));
-        float cy = 34.0f;
-        for (size_t i = static_cast<size_t>(st); i < lines.size() && cy < 228.0f; ++i) {
-            drawText(buf, lines[i].c_str(), 10.0f, cy, 0.38f, theme::INK);
-            cy += 14.0f;
+    int idx = std::clamp(app.ruleListCursor, 0, static_cast<int>(app.ruleResults.size()) - 1);
+    const SearchHit& h = app.ruleResults[static_cast<size_t>(idx)];
+
+    if (h.category == CAT_SPELL) {
+        SpellView sv{};
+        if (app.db.getSpell(h.recordId, sv)) {
+            renderSpellCard(buf, sv, app.ruleTopScroll);
+        }
+    } else if (h.category == CAT_RULE || h.category == CAT_CONDITION) {
+        RuleView rv{};
+        if (app.db.getRule(h.recordId, rv)) {
+            C2D_DrawRectSolid(0.0f, 0.0f, 0.2f, 400.0f, 26.0f, rv.isCondition ? theme::COND_BADGE : theme::FELT);
+            char hdr[64];
+            std::snprintf(hdr, sizeof(hdr), "%s  [%s]", rv.name, rv.category);
+            drawText(buf, hdr, 8.0f, 5.0f, 0.46f, theme::WHITE);
+
+            auto lines = wrapLines(rv.body, 60);
+            int st = std::max(0, std::min(app.ruleTopScroll, std::max(0, static_cast<int>(lines.size()) - 1)));
+            float cy = 34.0f;
+            for (size_t i = static_cast<size_t>(st); i < lines.size() && cy < 228.0f; ++i) {
+                drawText(buf, lines[i].c_str(), 10.0f, cy, 0.37f, theme::INK);
+                cy += 14.0f;
+            }
+        }
+    } else {
+        ReferenceView rv{};
+        if (app.db.getReference(h.recordId, rv)) {
+            if (rv.category == CAT_SRD_GAP && rv.subType == GAP_ALIAS && rv.linkedId != 0xFFFF) {
+                SpellView sv{};
+                if (app.db.getSpell(rv.linkedId, sv)) {
+                    renderSpellCard(buf, sv, app.ruleTopScroll, rv.subtitle);
+                    return;
+                }
+            }
+            bool isGap = (rv.category == CAT_SRD_GAP);
+            C2D_DrawRectSolid(0.0f, 0.0f, 0.12f, 400.0f, 240.0f, isGap ? theme::AMBER_BG : theme::PARCHMENT);
+            C2D_DrawRectSolid(0.0f, 0.0f, 0.2f, 400.0f, 26.0f, isGap ? theme::AMBER_HDR : theme::WALNUT);
+            drawText(buf, rv.name, 8.0f, 5.0f, 0.48f, theme::WHITE);
+            drawText(buf, rv.subtitle, 10.0f, 32.0f, 0.38f, isGap ? theme::AMBER_HDR : theme::CRIMSON_DARK);
+            C2D_DrawRectSolid(8.0f, 48.0f, 0.25f, 384.0f, 1.0f, theme::PARCHMENT_EDGE);
+
+            auto lines = wrapLines(rv.body, 60);
+            int st = std::max(0, std::min(app.ruleTopScroll, std::max(0, static_cast<int>(lines.size()) - 1)));
+            float cy = 54.0f;
+            for (size_t i = static_cast<size_t>(st); i < lines.size() && cy < 228.0f; ++i) {
+                drawText(buf, lines[i].c_str(), 10.0f, cy, 0.37f, theme::INK);
+                cy += 14.0f;
+            }
         }
     }
 }
 
-void renderTopCampaign(C2D_TextBuf buf, const AppState& app) {
+void renderTopTools(C2D_TextBuf buf, const AppState& app) {
     C2D_DrawRectSolid(0.0f, 0.0f, 0.1f, 400.0f, 240.0f, theme::PARCHMENT);
     C2D_DrawRectSolid(0.0f, 0.0f, 0.2f, 400.0f, 26.0f, theme::WALNUT);
 
-    if (app.campaignSubTab == 2) {
+    if (app.toolsSubTab == 0) {
+        drawText(buf, "RANDOM ENCOUNTER GENERATOR", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
+        char cfg[80];
+        std::snprintf(cfg, sizeof(cfg), "Party: Lv %u (%zu Heroes)  |  %s  |  %s",
+                      static_cast<unsigned>(app.campaign.partyLevel),
+                      app.campaign.party.size(),
+                      terrainToString(app.genTerrain),
+                      Generators::difficultyToString(app.genDifficulty));
+        drawText(buf, cfg, 10.0f, 34.0f, 0.38f, theme::CRIMSON_DARK);
+
+        if (!app.hasGenEncounter) {
+            drawText(buf, "Tap [Roll Encounter] below to build a fight!", 10.0f, 70.0f, 0.42f, theme::INK_MUTED);
+        } else {
+            drawText(buf, app.lastGenEncounter.name.c_str(), 10.0f, 62.0f, 0.46f, theme::INK);
+            float cy = 86.0f;
+            for (const auto& s : app.lastGenEncounter.slots) {
+                MonsterView mv{};
+                if (app.db.getMonster(s.monsterId, mv)) {
+                    char mb[72];
+                    std::snprintf(mb, sizeof(mb), "- %ux %s  (CR %s, HP %u, AC %u)",
+                                  static_cast<unsigned>(s.count), mv.name,
+                                  crIndexToString(mv.crIndex),
+                                  static_cast<unsigned>(mv.hitPoints),
+                                  static_cast<unsigned>(mv.armorClass));
+                    drawText(buf, mb, 14.0f, cy, 0.40f, theme::INK);
+                    cy += 18.0f;
+                }
+            }
+            drawText(buf, "Tap [Send to Fight Tracker] to roll initiative!", 10.0f, 198.0f, 0.36f, theme::FELT);
+        }
+    } else if (app.toolsSubTab == 1) {
+        drawText(buf, "NPC & POST-FIGHT LOOT GENERATORS", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
+        float cy = 34.0f;
+        drawText(buf, "NPC on the Spot:", 10.0f, cy, 0.40f, theme::CRIMSON_DARK); cy += 18.0f;
+        if (app.hasGenNpc) {
+            char nb[80];
+            std::snprintf(nb, sizeof(nb), "%s  (%s %s)",
+                          app.lastGenNpc.name.c_str(), app.lastGenNpc.ancestry.c_str(),
+                          app.lastGenNpc.occupation.c_str());
+            drawText(buf, nb, 14.0f, cy, 0.40f, theme::INK); cy += 16.0f;
+            auto qlines = wrapLines(app.lastGenNpc.quirk, 58);
+            for (const auto& ln : qlines) {
+                drawText(buf, ln.c_str(), 14.0f, cy, 0.36f, theme::INK_MUTED);
+                cy += 14.0f;
+            }
+        } else {
+            drawText(buf, "Tap [Roll NPC] below.", 14.0f, cy, 0.38f, theme::INK_MUTED); cy += 18.0f;
+        }
+
+        cy = 114.0f;
+        C2D_DrawRectSolid(8.0f, cy - 6.0f, 0.25f, 384.0f, 1.0f, theme::PARCHMENT_EDGE);
+        drawText(buf, "Treasure & Loot:", 10.0f, cy, 0.40f, theme::CRIMSON_DARK); cy += 18.0f;
+        if (app.hasGenLoot) {
+            drawText(buf, app.lastGenLoot.summary.c_str(), 14.0f, cy, 0.40f, theme::INK); cy += 17.0f;
+            if (!app.lastGenLoot.gemOrArt.empty()) {
+                std::string g = "Gem/Art: " + app.lastGenLoot.gemOrArt;
+                drawText(buf, g.c_str(), 14.0f, cy, 0.36f, theme::INK); cy += 15.0f;
+            }
+            for (const auto& it : app.lastGenLoot.items) {
+                auto ilines = wrapLines(std::string("- ") + it, 58);
+                for (const auto& ln : ilines) {
+                    if (cy < 228.0f) {
+                        drawText(buf, ln.c_str(), 14.0f, cy, 0.35f, theme::SPELL_BLUE);
+                        cy += 14.0f;
+                    }
+                }
+            }
+        } else {
+            drawText(buf, "Tap [Pocket Loot] or [Hoard Loot] below.", 14.0f, cy, 0.38f, theme::INK_MUTED);
+        }
+    } else if (app.toolsSubTab == 4) {
         drawText(buf, "CREDITS & OPEN CONTENT LICENSE (CC-BY-4.0)", 8.0f, 5.0f, 0.44f, theme::GOLD_BRIGHT);
         const char* legal =
             "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") "
@@ -421,52 +543,52 @@ void renderTopCampaign(C2D_TextBuf buf, const AppState& app) {
             "The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License "
             "available at https://creativecommons.org/licenses/by/4.0/legalcode.\n\n"
             "SD Card Homebrew Overlay:\n"
-            "Drop custom JSON packs into sdmc:/3ds/DM_Toolkit/homebrew/ to add custom entries.";
+            "Drop custom JSON packs into sdmc:/3ds/DM_Toolkit/homebrew/ to add custom monsters and spells.";
         auto lines = wrapLines(legal, 58);
         float cy = 36.0f;
         for (const auto& ln : lines) {
             drawText(buf, ln.c_str(), 10.0f, cy, 0.37f, theme::INK);
             cy += 14.0f;
         }
-        return;
+    } else {
+        char hdr[64];
+        std::snprintf(hdr, sizeof(hdr), "CAMPAIGN: %.28s (Lv %u)",
+                      app.campaign.name.c_str(), static_cast<unsigned>(app.campaign.partyLevel));
+        drawText(buf, hdr, 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
+
+        drawText(buf, "Party Roster:", 10.0f, 34.0f, 0.42f, theme::CRIMSON_DARK);
+        float cy = 54.0f;
+        for (size_t i = 0; i < app.campaign.party.size(); ++i) {
+            const auto& p = app.campaign.party[i];
+            char pb[64];
+            std::snprintf(pb, sizeof(pb), "%s%.18s  |  Init %+d  |  AC %u",
+                          (static_cast<int>(i) == app.partySelectedIdx ? "> " : "  "),
+                          p.name.c_str(), static_cast<int>(p.initBonus), static_cast<unsigned>(p.ac));
+            drawText(buf, pb, 10.0f, cy, 0.38f, (static_cast<int>(i) == app.partySelectedIdx) ? theme::CRIMSON : theme::INK);
+            cy += 16.0f;
+        }
+
+        char stats[96];
+        std::snprintf(stats, sizeof(stats), "SRD: %u Monsters, %u Spells, %u Refs | %zu Campaigns",
+                      static_cast<unsigned>(app.db.monsterCount()),
+                      static_cast<unsigned>(app.db.spellCount()),
+                      static_cast<unsigned>(app.db.refCount()),
+                      app.campaigns.size());
+        drawText(buf, stats, 10.0f, 218.0f, 0.33f, theme::INK_MUTED);
     }
-
-    char hdr[64];
-    std::snprintf(hdr, sizeof(hdr), "CAMPAIGN: %.28s (Lv %u)",
-                  app.campaign.name.c_str(), static_cast<unsigned>(app.campaign.partyLevel));
-    drawText(buf, hdr, 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
-
-    drawText(buf, "Party Roster:", 10.0f, 34.0f, 0.42f, theme::CRIMSON_DARK);
-    float cy = 54.0f;
-    for (size_t i = 0; i < app.campaign.party.size(); ++i) {
-        const auto& p = app.campaign.party[i];
-        char pb[64];
-        std::snprintf(pb, sizeof(pb), "%s%.18s  |  Init %+d  |  AC %u",
-                      (static_cast<int>(i) == app.partySelectedIdx ? "> " : "  "),
-                      p.name.c_str(), static_cast<int>(p.initBonus), static_cast<unsigned>(p.ac));
-        drawText(buf, pb, 10.0f, cy, 0.38f, (static_cast<int>(i) == app.partySelectedIdx) ? theme::CRIMSON : theme::INK);
-        cy += 16.0f;
-    }
-
-    char stats[96];
-    std::snprintf(stats, sizeof(stats), "Loaded: %u SRD Monsters, %u SD Homebrew Monsters, %zu Campaigns",
-                  static_cast<unsigned>(app.db.srdMonsterCount()),
-                  static_cast<unsigned>(app.db.homebrewMonsterCount()),
-                  app.campaigns.size());
-    drawText(buf, stats, 10.0f, 218.0f, 0.33f, theme::INK_MUTED);
 }
 
 // ── Bottom Screen Renderers (320x240) ─────────────────────────────────
 
 void drawModeTabs(C2D_TextBuf buf, AppMode active) {
-    const char* labels[4] = {"Fight", "Manual", "Rules", "Campaign"};
-    for (int i = 0; i < 4; ++i) {
-        Rect r{i * 80.0f, 0.0f, 80.0f, 28.0f};
+    const char* labels[5] = {"Fight", "Manual", "Dice", "Rules", "Tools"};
+    for (int i = 0; i < 5; ++i) {
+        Rect r{i * 64.0f, 0.0f, 64.0f, 28.0f};
         bool sel = (static_cast<int>(active) == i);
         drawButton(buf, r, labels[i],
                    sel ? theme::GOLD : theme::WALNUT,
                    theme::WALNUT_DARK,
-                   sel ? theme::INK : theme::PARCHMENT, 0.42f);
+                   sel ? theme::INK : theme::PARCHMENT, 0.39f);
     }
 }
 
@@ -475,13 +597,12 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
         drawText(buf, "Saved Encounters (Tap to Roll Initiative):", 8.0f, 34.0f, 0.38f, theme::PARCHMENT);
         float y = 54.0f;
         for (size_t i = 0; i < app.campaign.encounters.size() && i < 3; ++i) {
-            Rect r{8.0f, y, 304.0f, 38.0f};
-            drawButton(buf, r, app.campaign.encounters[i].name.c_str(),
+            drawButton(buf, Rect{8.0f, y, 304.0f, 38.0f}, app.campaign.encounters[i].name.c_str(),
                        theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.44f);
             y += 44.0f;
         }
-        drawButton(buf, Rect{8.0f, 190.0f, 304.0f, 40.0f}, "+ Pick Monsters from Manual",
-                   theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.46f);
+        drawButton(buf, Rect{8.0f, 190.0f, 148.0f, 40.0f}, "+ Pick Monster", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.42f);
+        drawButton(buf, Rect{164.0f, 190.0f, 148.0f, 40.0f}, "Random Fight", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.42f);
         return;
     }
 
@@ -504,10 +625,11 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
     }
 
     if (app.fightPanel == FIGHT_PANEL_END_CONFIRM) {
-        drawText(buf, "End this fight and clear the tracker?", 20.0f, 68.0f, 0.46f, theme::PARCHMENT);
-        drawText(buf, "(Your campaign & party stay saved.)", 36.0f, 92.0f, 0.38f, theme::PARCHMENT_ALT);
-        drawButton(buf, Rect{16.0f, 132.0f, 136.0f, 48.0f}, "Cancel", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::WHITE, 0.46f);
-        drawButton(buf, Rect{168.0f, 132.0f, 136.0f, 48.0f}, "End Fight", theme::CRIMSON, theme::GOLD, theme::WHITE, 0.46f);
+        drawText(buf, "End this fight and clear the tracker?", 20.0f, 58.0f, 0.46f, theme::PARCHMENT);
+        drawText(buf, "(Your campaign & party stay saved.)", 36.0f, 82.0f, 0.38f, theme::PARCHMENT_ALT);
+        drawButton(buf, Rect{12.0f, 118.0f, 94.0f, 46.0f}, "Cancel", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::WHITE, 0.42f);
+        drawButton(buf, Rect{113.0f, 118.0f, 94.0f, 46.0f}, "Roll Loot", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.42f);
+        drawButton(buf, Rect{214.0f, 118.0f, 94.0f, 46.0f}, "End Fight", theme::CRIMSON, theme::GOLD, theme::WHITE, 0.42f);
         return;
     }
 
@@ -521,14 +643,12 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
     }
     drawText(buf, selHdr, 8.0f, 32.0f, 0.40f, theme::GOLD_BRIGHT);
 
-    // Big one-handed HP damage/heal buttons (row 1: y = 52..96)
     drawButton(buf, Rect{6.0f,   52.0f, 58.0f, 44.0f}, "-10", theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.48f);
     drawButton(buf, Rect{68.0f,  52.0f, 58.0f, 44.0f}, "-5",  theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.48f);
     drawButton(buf, Rect{130.0f, 52.0f, 58.0f, 44.0f}, "-1",  theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.48f);
     drawButton(buf, Rect{194.0f, 52.0f, 58.0f, 44.0f}, "+1",  theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.48f);
     drawButton(buf, Rect{256.0f, 52.0f, 58.0f, 44.0f}, "+5",  theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.48f);
 
-    // Row 2 (y = 102..142): Conditions, Init -, Init +, Combat Rules
     drawButton(buf, Rect{6.0f,   102.0f, 96.0f, 38.0f}, "Conditions", theme::COND_BADGE, theme::GOLD_DARK, theme::WHITE, 0.38f);
     drawButton(buf, Rect{106.0f, 102.0f, 50.0f, 38.0f}, "Init-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
     drawButton(buf, Rect{160.0f, 102.0f, 50.0f, 38.0f}, "Init+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
@@ -536,18 +656,15 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
                app.combatRulesDrawerOpen ? "Hide Rules" : "Combat Rules",
                theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.36f);
 
-    // Row 3 (y = 148..194): Primary NEXT TURN + Add Monster
     drawButton(buf, Rect{6.0f,   148.0f, 184.0f, 46.0f}, "NEXT TURN  [A/R]", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.46f);
     drawButton(buf, Rect{196.0f, 148.0f, 118.0f, 46.0f}, "+ Monster", theme::FELT, theme::GOLD, theme::WHITE, 0.42f);
 
-    // Row 4 (y = 200..234): Prev / Select / End Fight
     drawButton(buf, Rect{6.0f,   200.0f, 96.0f, 34.0f}, "Prev Turn", theme::WALNUT_LIGHT, theme::WALNUT_DARK, theme::PARCHMENT, 0.38f);
     drawButton(buf, Rect{108.0f, 200.0f, 96.0f, 34.0f}, "Save Fight", theme::WALNUT_LIGHT, theme::WALNUT_DARK, theme::PARCHMENT, 0.38f);
     drawButton(buf, Rect{210.0f, 200.0f, 104.0f, 34.0f}, "End Fight", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.38f);
 }
 
 void renderBottomManual(C2D_TextBuf buf, const AppState& app) {
-    // Search bar + filter pills (y = 32..58)
     C2D_DrawRectSolid(6.0f, 32.0f, 0.25f, 148.0f, 24.0f, theme::PARCHMENT);
     char qBuf[40];
     std::snprintf(qBuf, sizeof(qBuf), "Search: %s_", app.monsterQuery.c_str());
@@ -559,7 +676,6 @@ void renderBottomManual(C2D_TextBuf buf, const AppState& app) {
     drawButton(buf, Rect{226.0f, 32.0f, 54.0f, 24.0f}, crLbl[app.monsterCrFilter], theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.32f);
     drawButton(buf, Rect{282.0f, 32.0f, 34.0f, 24.0f}, "Clr", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.34f);
 
-    // 3 visible monster rows (y = 60..159)
     for (int i = 0; i < 3; ++i) {
         int idx = app.monsterListScroll + i;
         if (idx >= static_cast<int>(app.monsterResults.size())) break;
@@ -587,46 +703,124 @@ void renderBottomManual(C2D_TextBuf buf, const AppState& app) {
     drawQwertyKeypad(buf);
 }
 
+void renderBottomDice(C2D_TextBuf buf, const AppState& app) {
+    // Row 1: 7 die buttons (y = 34..74)
+    for (int i = 0; i < DIE_SHAPE_COUNT; ++i) {
+        Rect r{4.0f + i * 44.5f, 34.0f, 42.0f, 38.0f};
+        bool sel = (static_cast<int>(app.diceShape) == i);
+        drawButton(buf, r, DiceRoller::shapeLabel(static_cast<DieShape>(i)),
+                   sel ? theme::GOLD : theme::WALNUT_LIGHT,
+                   sel ? theme::GOLD_BRIGHT : theme::WALNUT_DARK,
+                   sel ? theme::INK : theme::PARCHMENT, 0.40f);
+    }
+
+    // Row 2: Modifier & Advantage/Disadvantage (y = 80..118)
+    char modLbl[24];
+    std::snprintf(modLbl, sizeof(modLbl), "Mod %+d", app.diceMod);
+    drawButton(buf, Rect{6.0f,   80.0f, 44.0f, 36.0f}, "-1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.44f);
+    drawButton(buf, Rect{54.0f,  80.0f, 76.0f, 36.0f}, modLbl, theme::WALNUT_DARK, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.40f);
+    drawButton(buf, Rect{134.0f, 80.0f, 44.0f, 36.0f}, "+1", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.44f);
+
+    const char* advStr = (app.diceAdvMode == ROLL_ADVANTAGE) ? "Advantage"
+                       : (app.diceAdvMode == ROLL_DISADVANTAGE) ? "Disadv."
+                       : "Normal";
+    uint32_t advCol = (app.diceAdvMode == ROLL_ADVANTAGE) ? theme::HP_GOOD
+                    : (app.diceAdvMode == ROLL_DISADVANTAGE) ? theme::CRIMSON
+                    : theme::WALNUT_LIGHT;
+    drawButton(buf, Rect{186.0f, 80.0f, 128.0f, 36.0f}, advStr, advCol, theme::GOLD, theme::WHITE, 0.40f);
+
+    // Row 3: Huge ROLL button (y = 124..176)
+    char rollLbl[40];
+    std::snprintf(rollLbl, sizeof(rollLbl), "ROLL %s  [A]", DiceRoller::shapeLabel(app.diceShape));
+    drawButton(buf, Rect{6.0f, 124.0f, 308.0f, 52.0f}, rollLbl, theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.54f);
+
+    // Row 4: Dice Skin & Tray Skin customizer pills (y = 184..232)
+    char dSkinLbl[40], tSkinLbl[40];
+    std::snprintf(dSkinLbl, sizeof(dSkinLbl), "Die: %s", getDiceSkin(app.diceSkinIdx).name);
+    std::snprintf(tSkinLbl, sizeof(tSkinLbl), "Tray: %s", getTraySkin(app.traySkinIdx).name);
+    drawButton(buf, Rect{6.0f,   184.0f, 150.0f, 44.0f}, dSkinLbl, theme::WALNUT_LIGHT, theme::GOLD, theme::GOLD_BRIGHT, 0.35f);
+    drawButton(buf, Rect{164.0f, 184.0f, 150.0f, 44.0f}, tSkinLbl, theme::FELT, theme::GOLD, theme::WHITE, 0.35f);
+}
+
 void renderBottomRules(C2D_TextBuf buf, const AppState& app) {
-    C2D_DrawRectSolid(6.0f, 32.0f, 0.25f, 186.0f, 24.0f, theme::PARCHMENT);
-    char qBuf[40];
-    std::snprintf(qBuf, sizeof(qBuf), "Rule: %s_", app.ruleQuery.c_str());
-    drawText(buf, qBuf, 10.0f, 36.0f, 0.38f, theme::INK);
+    // Sub-tabs (y = 30..50)
+    const char* tabs[REF_TAB_COUNT] = {"All", "Spells", "Combat", "Cls/Race", "Gear"};
+    for (int i = 0; i < REF_TAB_COUNT; ++i) {
+        Rect r{4.0f + i * 62.5f, 30.0f, 60.0f, 20.0f};
+        bool sel = (static_cast<int>(app.refTab) == i);
+        drawButton(buf, r, tabs[i], sel ? theme::GOLD : theme::WALNUT_LIGHT, theme::WALNUT_DARK,
+                   sel ? theme::INK : theme::PARCHMENT, 0.33f);
+    }
 
-    drawButton(buf, Rect{196.0f, 32.0f, 80.0f, 24.0f},
-               app.rulesConditionsOnly ? "Conds Only" : "All Rules",
-               theme::COND_BADGE, theme::GOLD_DARK, theme::WHITE, 0.33f);
-    drawButton(buf, Rect{280.0f, 32.0f, 34.0f, 24.0f}, "Clr", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.34f);
+    // Search bar + Clear (y = 53..74)
+    C2D_DrawRectSolid(6.0f, 53.0f, 0.25f, 266.0f, 21.0f, theme::PARCHMENT);
+    char qBuf[44];
+    std::snprintf(qBuf, sizeof(qBuf), "Find: %s_", app.ruleQuery.c_str());
+    drawText(buf, qBuf, 10.0f, 56.0f, 0.36f, theme::INK);
+    drawButton(buf, Rect{276.0f, 53.0f, 38.0f, 21.0f}, "Clr", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.33f);
 
+    // 3 visible reference rows (y = 77..160)
     for (int i = 0; i < 3; ++i) {
         int idx = app.ruleListScroll + i;
         if (idx >= static_cast<int>(app.ruleResults.size())) break;
-        RuleView rv{};
-        if (!app.db.getRule(app.ruleResults[static_cast<size_t>(idx)].recordId, rv)) continue;
-
-        float ry = 60.0f + i * 33.0f;
+        const SearchHit& h = app.ruleResults[static_cast<size_t>(idx)];
+        float ry = 77.0f + i * 28.0f;
         bool sel = (idx == app.ruleListCursor);
-        C2D_DrawRectSolid(6.0f, ry, 0.2f, 308.0f, 30.0f, sel ? theme::GOLD : theme::WALNUT_LIGHT);
-        C2D_DrawRectSolid(7.0f, ry + 1.0f, 0.25f, 306.0f, 28.0f, sel ? theme::ACTIVE_ROW : theme::PARCHMENT);
-        drawText(buf, rv.name, 12.0f, ry + 3.0f, 0.40f, theme::INK);
-        drawText(buf, rv.category, 12.0f, ry + 17.0f, 0.31f, rv.isCondition ? theme::COND_BADGE : theme::FELT);
+
+        const char* title = "";
+        const char* badge = "";
+        uint32_t badgeCol = theme::INK_MUTED;
+        if (h.category == CAT_SPELL) {
+            SpellView sv{};
+            if (app.db.getSpell(h.recordId, sv)) { title = sv.name; badge = sv.isHomebrew ? "Spell [HB]" : "Spell"; badgeCol = theme::SPELL_BLUE; }
+        } else if (h.category == CAT_RULE || h.category == CAT_CONDITION) {
+            RuleView rv{};
+            if (app.db.getRule(h.recordId, rv)) { title = rv.name; badge = rv.category; badgeCol = rv.isCondition ? theme::COND_BADGE : theme::FELT; }
+        } else {
+            ReferenceView rv{};
+            if (app.db.getReference(h.recordId, rv)) {
+                title = rv.name;
+                badge = (rv.category == CAT_SRD_GAP) ? (rv.subType == GAP_ALIAS ? "SRD Alias" : "Non-SRD") : rv.subtitle;
+                badgeCol = (rv.category == CAT_SRD_GAP) ? theme::AMBER_HDR : theme::WALNUT_LIGHT;
+            }
+        }
+
+        C2D_DrawRectSolid(6.0f, ry, 0.2f, 308.0f, 26.0f, sel ? theme::GOLD : theme::WALNUT_LIGHT);
+        C2D_DrawRectSolid(7.0f, ry + 1.0f, 0.25f, 306.0f, 24.0f, sel ? theme::ACTIVE_ROW : theme::PARCHMENT);
+        char tBuf[28];
+        std::snprintf(tBuf, sizeof(tBuf), "%.24s", title);
+        drawText(buf, tBuf, 12.0f, ry + 4.0f, 0.37f, theme::INK);
+        char bBuf[20];
+        std::snprintf(bBuf, sizeof(bBuf), "%.16s", badge);
+        drawText(buf, bBuf, 210.0f, ry + 5.0f, 0.31f, badgeCol);
     }
 
     drawQwertyKeypad(buf);
 }
 
-void renderBottomCampaign(C2D_TextBuf buf, const AppState& app) {
-    drawButton(buf, Rect{6.0f,   34.0f, 98.0f, 28.0f}, "Party",
-               app.campaignSubTab == 0 ? theme::GOLD : theme::WALNUT_LIGHT, theme::WALNUT_DARK,
-               app.campaignSubTab == 0 ? theme::INK : theme::PARCHMENT, 0.38f);
-    drawButton(buf, Rect{110.0f, 34.0f, 98.0f, 28.0f}, "Campaigns",
-               app.campaignSubTab == 1 ? theme::GOLD : theme::WALNUT_LIGHT, theme::WALNUT_DARK,
-               app.campaignSubTab == 1 ? theme::INK : theme::PARCHMENT, 0.38f);
-    drawButton(buf, Rect{214.0f, 34.0f, 100.0f, 28.0f}, "CC-BY Legal",
-               app.campaignSubTab == 2 ? theme::GOLD : theme::WALNUT_LIGHT, theme::WALNUT_DARK,
-               app.campaignSubTab == 2 ? theme::INK : theme::PARCHMENT, 0.36f);
+void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
+    const char* sub[5] = {"Enc Gen", "NPC/Loot", "Party", "Saves", "Legal"};
+    for (int i = 0; i < 5; ++i) {
+        Rect r{4.0f + i * 62.5f, 32.0f, 60.0f, 26.0f};
+        bool sel = (app.toolsSubTab == i);
+        drawButton(buf, r, sub[i], sel ? theme::GOLD : theme::WALNUT_LIGHT, theme::WALNUT_DARK,
+                   sel ? theme::INK : theme::PARCHMENT, 0.33f);
+    }
 
-    if (app.campaignSubTab == 0) {
+    if (app.toolsSubTab == 0) {
+        char tLbl[32], dLbl[32];
+        std::snprintf(tLbl, sizeof(tLbl), "Terrain: %s", terrainToString(app.genTerrain));
+        std::snprintf(dLbl, sizeof(dLbl), "Diff: %s", Generators::difficultyToString(app.genDifficulty));
+        drawButton(buf, Rect{6.0f,   68.0f, 150.0f, 40.0f}, tLbl, theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{164.0f, 68.0f, 150.0f, 40.0f}, dLbl, theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{6.0f,  116.0f, 308.0f, 48.0f}, "Roll Random Encounter", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.46f);
+        drawButton(buf, Rect{6.0f,  174.0f, 308.0f, 48.0f}, "Send to Fight Tracker",
+                   app.hasGenEncounter ? theme::FELT_LIGHT : theme::WALNUT_DARK, theme::GOLD, theme::WHITE, 0.44f);
+    } else if (app.toolsSubTab == 1) {
+        drawButton(buf, Rect{6.0f,   70.0f, 308.0f, 48.0f}, "Roll Random NPC", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.46f);
+        drawButton(buf, Rect{6.0f,  130.0f, 150.0f, 48.0f}, "Pocket Loot", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.42f);
+        drawButton(buf, Rect{164.0f,130.0f, 150.0f, 48.0f}, "Hoard Loot", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.42f);
+    } else if (app.toolsSubTab == 2) {
         drawButton(buf, Rect{6.0f,   72.0f, 148.0f, 38.0f}, "+ Add Hero", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.42f);
         drawButton(buf, Rect{166.0f, 72.0f, 148.0f, 38.0f}, "Rename Hero", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
         drawButton(buf, Rect{6.0f,  118.0f, 72.0f,  38.0f}, "Init -1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.40f);
@@ -634,8 +828,8 @@ void renderBottomCampaign(C2D_TextBuf buf, const AppState& app) {
         drawButton(buf, Rect{166.0f,118.0f, 72.0f,  38.0f}, "Lv -1", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
         drawButton(buf, Rect{242.0f,118.0f, 72.0f,  38.0f}, "Lv +1", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
         drawButton(buf, Rect{6.0f,  166.0f, 308.0f, 38.0f}, "Save Campaign to SD", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.44f);
-    } else if (app.campaignSubTab == 1) {
-        float y = 70.0f;
+    } else if (app.toolsSubTab == 3) {
+        float y = 68.0f;
         for (size_t i = 0; i < app.campaigns.size() && i < 3; ++i) {
             bool active = (app.campaigns[i].slug == app.campaign.slug);
             drawButton(buf, Rect{6.0f, y, 308.0f, 34.0f}, app.campaigns[i].name.c_str(),
@@ -643,11 +837,11 @@ void renderBottomCampaign(C2D_TextBuf buf, const AppState& app) {
                        active ? theme::GOLD : theme::WALNUT_DARK, theme::WHITE, 0.42f);
             y += 38.0f;
         }
-        drawButton(buf, Rect{6.0f, 192.0f, 308.0f, 38.0f}, "+ Create New Campaign", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.44f);
+        drawButton(buf, Rect{6.0f, 190.0f, 308.0f, 38.0f}, "+ Create New Campaign", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.44f);
     } else {
-        drawText(buf, "DM's Toolkit (Slice 1)", 10.0f, 80.0f, 0.46f, theme::GOLD_BRIGHT);
-        drawText(buf, "SRD 5.1 under CC-BY-4.0", 10.0f, 106.0f, 0.40f, theme::PARCHMENT);
-        drawText(buf, "See top screen for full legal notice.", 10.0f, 130.0f, 0.36f, theme::PARCHMENT_ALT);
+        drawText(buf, "DM's Toolkit v1.0", 10.0f, 80.0f, 0.48f, theme::GOLD_BRIGHT);
+        drawText(buf, "SRD 5.1 under CC-BY-4.0", 10.0f, 108.0f, 0.40f, theme::PARCHMENT);
+        drawText(buf, "See top screen for full legal notice.", 10.0f, 132.0f, 0.36f, theme::PARCHMENT_ALT);
     }
 }
 
@@ -670,6 +864,8 @@ int main(int argc, char** argv) {
 
     AppState app;
     app.rngState = static_cast<uint32_t>(svcGetSystemTick() ^ 0xA5A55A5Au);
+    app.dice.roll(DIE_D20, 0, ROLL_NORMAL, app.rngState);
+    app.dice.finishImmediately();
 
     if (app.db.loadFromFile("romfs:/data/srd.bin")) {
         app.campaignMgr.ensureDefaultCampaign(app.db);
@@ -680,9 +876,7 @@ int main(int argc, char** argv) {
         }
         app.refreshMonsterSearch();
         app.refreshRuleSearch();
-        if (hbLoaded > 0) {
-            app.setStatus("Loaded SRD + SD homebrew entries.");
-        }
+        if (hbLoaded > 0) app.setStatus("Loaded SRD + SD homebrew entries.");
     } else {
         app.setStatus("Error: romfs:/data/srd.bin missing!", 300);
     }
@@ -692,34 +886,28 @@ int main(int argc, char** argv) {
         u32 kDown = hidKeysDown();
         if (kDown & KEY_START) break;
 
+        app.dice.step(1.0f / 60.0f);
+
         touchPosition touch{};
         bool tapped = (kDown & KEY_TOUCH) != 0;
         if (tapped) hidTouchRead(&touch);
         float tx = static_cast<float>(touch.px);
         float ty = static_cast<float>(touch.py);
 
-        // Mode tabs (y = 0..28)
         if (tapped && ty <= 28.0f) {
-            int tab = std::clamp(static_cast<int>(tx / 80.0f), 0, 3);
+            int tab = std::clamp(static_cast<int>(tx / 64.0f), 0, 4);
             app.mode = static_cast<AppMode>(tab);
             app.fightPanel = FIGHT_PANEL_MAIN;
         } else if (app.mode == MODE_FIGHT) {
-            // Hardware buttons in Fight Tracker
-            if (kDown & KEY_DUP) {
-                if (app.tracker.isInCombat()) {
-                    app.tracker.setSelectedIndex(app.tracker.selectedIndex() - 1);
-                    app.trackerRightScroll = 0;
-                }
-            } else if (kDown & KEY_DDOWN) {
-                if (app.tracker.isInCombat()) {
-                    app.tracker.setSelectedIndex(app.tracker.selectedIndex() + 1);
-                    app.trackerRightScroll = 0;
-                }
-            } else if ((kDown & KEY_A) || ((kDown & KEY_R) && !app.combatRulesDrawerOpen)) {
-                if (app.tracker.isInCombat()) {
-                    app.tracker.nextTurn();
-                    app.trackerRightScroll = 0;
-                }
+            if (kDown & KEY_DUP && app.tracker.isInCombat()) {
+                app.tracker.setSelectedIndex(app.tracker.selectedIndex() - 1);
+                app.trackerRightScroll = 0;
+            } else if (kDown & KEY_DDOWN && app.tracker.isInCombat()) {
+                app.tracker.setSelectedIndex(app.tracker.selectedIndex() + 1);
+                app.trackerRightScroll = 0;
+            } else if (((kDown & KEY_A) || ((kDown & KEY_R) && !app.combatRulesDrawerOpen)) && app.tracker.isInCombat()) {
+                app.tracker.nextTurn();
+                app.trackerRightScroll = 0;
             } else if (kDown & KEY_B) {
                 if (app.combatRulesDrawerOpen) app.combatRulesDrawerOpen = false;
                 else if (app.fightPanel != FIGHT_PANEL_MAIN) app.fightPanel = FIGHT_PANEL_MAIN;
@@ -736,7 +924,6 @@ int main(int argc, char** argv) {
                 app.trackerRightScroll = std::max(0, app.trackerRightScroll - 2);
             }
 
-            // Touch controls in Fight Tracker
             if (tapped) {
                 if (!app.tracker.isInCombat()) {
                     float y = 54.0f;
@@ -749,16 +936,18 @@ int main(int argc, char** argv) {
                         }
                         y += 44.0f;
                     }
-                    if (Rect{8.0f, 190.0f, 304.0f, 40.0f}.contains(tx, ty)) {
+                    if (Rect{8.0f, 190.0f, 148.0f, 40.0f}.contains(tx, ty)) {
                         app.mode = MODE_MANUAL;
+                    } else if (Rect{164.0f, 190.0f, 148.0f, 40.0f}.contains(tx, ty)) {
+                        app.mode = MODE_TOOLS;
+                        app.toolsSubTab = 0;
                     }
                 } else if (app.fightPanel == FIGHT_PANEL_CONDITIONS) {
                     for (int i = 0; i < CONDITION_COUNT; ++i) {
-                        int col = i % 3;
-                        int row = i / 3;
+                        int col = i % 3, row = i / 3;
                         if (Rect{6.0f + col * 104.0f, 48.0f + row * 30.0f, 100.0f, 26.0f}.contains(tx, ty)) {
                             app.tracker.toggleCondition(app.tracker.selectedIndex(), i);
-                            app.drawerRuleIndex = i; // Conditions are 0..14
+                            app.drawerRuleIndex = i;
                             break;
                         }
                     }
@@ -768,9 +957,18 @@ int main(int argc, char** argv) {
                         app.fightPanel = FIGHT_PANEL_MAIN;
                     }
                 } else if (app.fightPanel == FIGHT_PANEL_END_CONFIRM) {
-                    if (Rect{16.0f, 132.0f, 136.0f, 48.0f}.contains(tx, ty)) {
+                    if (Rect{12.0f, 118.0f, 94.0f, 46.0f}.contains(tx, ty)) {
                         app.fightPanel = FIGHT_PANEL_MAIN;
-                    } else if (Rect{168.0f, 132.0f, 136.0f, 48.0f}.contains(tx, ty)) {
+                    } else if (Rect{113.0f, 118.0f, 94.0f, 46.0f}.contains(tx, ty)) {
+                        app.tracker.clear();
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.lastGenLoot = Generators::generateLoot(app.db, app.campaign.partyLevel, true, app.rngState);
+                        app.hasGenLoot  = true;
+                        app.fightPanel  = FIGHT_PANEL_MAIN;
+                        app.mode        = MODE_TOOLS;
+                        app.toolsSubTab = 1;
+                        app.setStatus("Post-fight loot rolled!");
+                    } else if (Rect{214.0f, 118.0f, 94.0f, 46.0f}.contains(tx, ty)) {
                         app.tracker.clear();
                         app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                         app.fightPanel = FIGHT_PANEL_MAIN;
@@ -807,18 +1005,14 @@ int main(int argc, char** argv) {
                 }
             }
         } else if (app.mode == MODE_MANUAL) {
-            if (kDown & KEY_DUP) {
-                if (app.monsterListCursor > 0) {
-                    --app.monsterListCursor;
-                    if (app.monsterListCursor < app.monsterListScroll) app.monsterListScroll = app.monsterListCursor;
-                    app.manualTopScroll = 0;
-                }
-            } else if (kDown & KEY_DDOWN) {
-                if (app.monsterListCursor + 1 < static_cast<int>(app.monsterResults.size())) {
-                    ++app.monsterListCursor;
-                    if (app.monsterListCursor >= app.monsterListScroll + 3) app.monsterListScroll = app.monsterListCursor - 2;
-                    app.manualTopScroll = 0;
-                }
+            if (kDown & KEY_DUP && app.monsterListCursor > 0) {
+                --app.monsterListCursor;
+                if (app.monsterListCursor < app.monsterListScroll) app.monsterListScroll = app.monsterListCursor;
+                app.manualTopScroll = 0;
+            } else if (kDown & KEY_DDOWN && app.monsterListCursor + 1 < static_cast<int>(app.monsterResults.size())) {
+                ++app.monsterListCursor;
+                if (app.monsterListCursor >= app.monsterListScroll + 3) app.monsterListScroll = app.monsterListCursor - 2;
+                app.manualTopScroll = 0;
             } else if (kDown & KEY_R || kDown & KEY_CPAD_DOWN) {
                 app.manualTopScroll += 3;
             } else if (kDown & KEY_L || kDown & KEY_CPAD_UP) {
@@ -858,6 +1052,37 @@ int main(int argc, char** argv) {
                     }
                 }
             }
+        } else if (app.mode == MODE_DICE) {
+            if (kDown & KEY_A || kDown & KEY_X) {
+                app.dice.roll(app.diceShape, app.diceMod, app.diceAdvMode, app.rngState);
+            } else if (kDown & KEY_L) {
+                app.diceSkinIdx = (app.diceSkinIdx + 1) % DICE_SKIN_COUNT;
+            } else if (kDown & KEY_R) {
+                app.traySkinIdx = (app.traySkinIdx + 1) % TRAY_SKIN_COUNT;
+            }
+
+            if (tapped) {
+                for (int i = 0; i < DIE_SHAPE_COUNT; ++i) {
+                    if (Rect{4.0f + i * 44.5f, 34.0f, 42.0f, 38.0f}.contains(tx, ty)) {
+                        app.diceShape = static_cast<DieShape>(i);
+                        app.dice.roll(app.diceShape, app.diceMod, app.diceAdvMode, app.rngState);
+                        break;
+                    }
+                }
+                if (Rect{6.0f, 80.0f, 44.0f, 36.0f}.contains(tx, ty)) {
+                    app.diceMod = std::max(-10, app.diceMod - 1);
+                } else if (Rect{134.0f, 80.0f, 44.0f, 36.0f}.contains(tx, ty)) {
+                    app.diceMod = std::min(20, app.diceMod + 1);
+                } else if (Rect{186.0f, 80.0f, 128.0f, 36.0f}.contains(tx, ty)) {
+                    app.diceAdvMode = static_cast<RollAdvantageMode>((app.diceAdvMode + 1) % 3);
+                } else if (Rect{6.0f, 124.0f, 308.0f, 52.0f}.contains(tx, ty)) {
+                    app.dice.roll(app.diceShape, app.diceMod, app.diceAdvMode, app.rngState);
+                } else if (Rect{6.0f, 184.0f, 150.0f, 44.0f}.contains(tx, ty)) {
+                    app.diceSkinIdx = (app.diceSkinIdx + 1) % DICE_SKIN_COUNT;
+                } else if (Rect{164.0f, 184.0f, 150.0f, 44.0f}.contains(tx, ty)) {
+                    app.traySkinIdx = (app.traySkinIdx + 1) % TRAY_SKIN_COUNT;
+                }
+            }
         } else if (app.mode == MODE_RULES) {
             if (kDown & KEY_DUP && app.ruleListCursor > 0) {
                 --app.ruleListCursor;
@@ -874,12 +1099,15 @@ int main(int argc, char** argv) {
             }
 
             if (tapped) {
-                if (Rect{196.0f, 32.0f, 80.0f, 24.0f}.contains(tx, ty)) {
-                    app.rulesConditionsOnly = !app.rulesConditionsOnly;
-                    app.refreshRuleSearch();
-                } else if (Rect{280.0f, 32.0f, 34.0f, 24.0f}.contains(tx, ty)) {
+                for (int i = 0; i < REF_TAB_COUNT; ++i) {
+                    if (Rect{4.0f + i * 62.5f, 30.0f, 60.0f, 20.0f}.contains(tx, ty)) {
+                        app.refTab = static_cast<RefTabFilter>(i);
+                        app.refreshRuleSearch();
+                        break;
+                    }
+                }
+                if (Rect{276.0f, 53.0f, 38.0f, 21.0f}.contains(tx, ty)) {
                     app.ruleQuery.clear();
-                    app.rulesConditionsOnly = false;
                     app.refreshRuleSearch();
                 } else if (handleQwertyTouch(tx, ty, app.ruleQuery)) {
                     app.refreshRuleSearch();
@@ -887,7 +1115,7 @@ int main(int argc, char** argv) {
                     for (int i = 0; i < 3; ++i) {
                         int idx = app.ruleListScroll + i;
                         if (idx >= static_cast<int>(app.ruleResults.size())) break;
-                        if (Rect{6.0f, 60.0f + i * 33.0f, 308.0f, 30.0f}.contains(tx, ty)) {
+                        if (Rect{6.0f, 77.0f + i * 28.0f, 308.0f, 26.0f}.contains(tx, ty)) {
                             app.ruleListCursor = idx;
                             app.ruleTopScroll = 0;
                             break;
@@ -895,15 +1123,45 @@ int main(int argc, char** argv) {
                     }
                 }
             }
-        } else if (app.mode == MODE_CAMPAIGN) {
+        } else if (app.mode == MODE_TOOLS) {
             if (kDown & KEY_DUP && app.partySelectedIdx > 0) --app.partySelectedIdx;
             if (kDown & KEY_DDOWN && app.partySelectedIdx + 1 < static_cast<int>(app.campaign.party.size())) ++app.partySelectedIdx;
 
             if (tapped) {
-                if (Rect{6.0f, 34.0f, 98.0f, 28.0f}.contains(tx, ty)) app.campaignSubTab = 0;
-                else if (Rect{110.0f, 34.0f, 98.0f, 28.0f}.contains(tx, ty)) app.campaignSubTab = 1;
-                else if (Rect{214.0f, 34.0f, 100.0f, 28.0f}.contains(tx, ty)) app.campaignSubTab = 2;
-                else if (app.campaignSubTab == 0) {
+                for (int i = 0; i < 5; ++i) {
+                    if (Rect{4.0f + i * 62.5f, 32.0f, 60.0f, 26.0f}.contains(tx, ty)) {
+                        app.toolsSubTab = i;
+                        break;
+                    }
+                }
+                if (app.toolsSubTab == 0) {
+                    if (Rect{6.0f, 68.0f, 150.0f, 40.0f}.contains(tx, ty)) {
+                        app.genTerrain = static_cast<TerrainType>((app.genTerrain + 1) % TERRAIN_COUNT);
+                    } else if (Rect{164.0f, 68.0f, 150.0f, 40.0f}.contains(tx, ty)) {
+                        app.genDifficulty = static_cast<EncounterDifficulty>((app.genDifficulty + 1) % DIFF_COUNT);
+                    } else if (Rect{6.0f, 116.0f, 308.0f, 48.0f}.contains(tx, ty)) {
+                        int pSize = std::max(1, static_cast<int>(app.campaign.party.size()));
+                        app.lastGenEncounter = Generators::generateEncounter(
+                            app.db, app.campaign.partyLevel, pSize, app.genTerrain, app.genDifficulty, app.rngState);
+                        app.hasGenEncounter = !app.lastGenEncounter.slots.empty();
+                    } else if (Rect{6.0f, 174.0f, 308.0f, 48.0f}.contains(tx, ty) && app.hasGenEncounter) {
+                        app.tracker.startEncounter(app.lastGenEncounter, app.campaign.party, app.db, app.rngState);
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.mode = MODE_FIGHT;
+                        app.setStatus("Random encounter started!");
+                    }
+                } else if (app.toolsSubTab == 1) {
+                    if (Rect{6.0f, 70.0f, 308.0f, 48.0f}.contains(tx, ty)) {
+                        app.lastGenNpc = Generators::generateNpc(app.rngState);
+                        app.hasGenNpc = true;
+                    } else if (Rect{6.0f, 130.0f, 150.0f, 48.0f}.contains(tx, ty)) {
+                        app.lastGenLoot = Generators::generateLoot(app.db, app.campaign.partyLevel, false, app.rngState);
+                        app.hasGenLoot = true;
+                    } else if (Rect{164.0f, 130.0f, 150.0f, 48.0f}.contains(tx, ty)) {
+                        app.lastGenLoot = Generators::generateLoot(app.db, app.campaign.partyLevel, true, app.rngState);
+                        app.hasGenLoot = true;
+                    }
+                } else if (app.toolsSubTab == 2) {
                     if (Rect{6.0f, 72.0f, 148.0f, 38.0f}.contains(tx, ty) && app.campaign.party.size() < 8) {
                         std::string hname = "New Hero";
                         if (openSystemKeyboard(hname, 24, "Hero Name")) {
@@ -930,8 +1188,8 @@ int main(int argc, char** argv) {
                         app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                         app.setStatus("Campaign saved to SD!");
                     }
-                } else if (app.campaignSubTab == 1) {
-                    float y = 70.0f;
+                } else if (app.toolsSubTab == 3) {
+                    float y = 68.0f;
                     for (size_t i = 0; i < app.campaigns.size() && i < 3; ++i) {
                         if (Rect{6.0f, y, 308.0f, 34.0f}.contains(tx, ty)) {
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
@@ -942,7 +1200,7 @@ int main(int argc, char** argv) {
                         }
                         y += 38.0f;
                     }
-                    if (Rect{6.0f, 192.0f, 308.0f, 38.0f}.contains(tx, ty)) {
+                    if (Rect{6.0f, 190.0f, 308.0f, 38.0f}.contains(tx, ty)) {
                         std::string cname = "New Campaign";
                         if (openSystemKeyboard(cname, 28, "Campaign Name")) {
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
@@ -965,28 +1223,29 @@ int main(int argc, char** argv) {
 
         C2D_TargetClear(topTarget, theme::WALNUT_DARK);
         C2D_SceneBegin(topTarget);
-        if (app.mode == MODE_FIGHT)         renderTopFight(topBuf, app);
-        else if (app.mode == MODE_MANUAL)   renderTopManual(topBuf, app);
-        else if (app.mode == MODE_RULES)    renderTopRules(topBuf, app);
-        else                                renderTopCampaign(topBuf, app);
+        if (app.mode == MODE_FIGHT)       renderTopFight(topBuf, app);
+        else if (app.mode == MODE_MANUAL) renderTopManual(topBuf, app);
+        else if (app.mode == MODE_DICE)   renderTopDiceTray(topBuf, app);
+        else if (app.mode == MODE_RULES)  renderTopRules(topBuf, app);
+        else                              renderTopTools(topBuf, app);
 
         C2D_TargetClear(botTarget, theme::WALNUT);
         C2D_SceneBegin(botTarget);
         drawModeTabs(botBuf, app.mode);
-        if (app.mode == MODE_FIGHT)         renderBottomFight(botBuf, app);
-        else if (app.mode == MODE_MANUAL)   renderBottomManual(botBuf, app);
-        else if (app.mode == MODE_RULES)    renderBottomRules(botBuf, app);
-        else                                renderBottomCampaign(botBuf, app);
+        if (app.mode == MODE_FIGHT)       renderBottomFight(botBuf, app);
+        else if (app.mode == MODE_MANUAL) renderBottomManual(botBuf, app);
+        else if (app.mode == MODE_DICE)   renderBottomDice(botBuf, app);
+        else if (app.mode == MODE_RULES)  renderBottomRules(botBuf, app);
+        else                              renderBottomTools(botBuf, app);
 
         if (app.statusFrames > 0 && !app.statusBanner.empty()) {
-            Rect toast{20.0f, 212.0f, 280.0f, 22.0f};
-            drawButton(botBuf, toast, app.statusBanner.c_str(), theme::FELT, theme::GOLD, theme::WHITE, 0.36f);
+            drawButton(botBuf, Rect{20.0f, 212.0f, 280.0f, 22.0f}, app.statusBanner.c_str(),
+                       theme::FELT, theme::GOLD, theme::WHITE, 0.36f);
         }
 
         C3D_FrameEnd(0);
     }
 
-    // Auto-save active campaign and fight on clean exit
     app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
 
     C2D_TextBufDelete(topBuf);

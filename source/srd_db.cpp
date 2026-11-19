@@ -12,6 +12,7 @@ bool SrdDatabase::loadFromFile(const char* path) {
     loaded_ = false;
     raw_.clear();
     hbMonsters_.clear();
+    hbSpells_.clear();
     hbSearchEntries_.clear();
 
     FILE* fp = std::fopen(path, "rb");
@@ -35,12 +36,13 @@ bool SrdDatabase::loadFromFile(const char* path) {
         return false;
     }
 
-    // Validate section bounds
     if (header_.stringPoolOffset + header_.stringPoolSize > raw_.size()) return false;
 
     monsters_   = reinterpret_cast<const MonsterRecord*>(raw_.data() + header_.monstersOffset);
     actions_    = reinterpret_cast<const MonsterActionRef*>(raw_.data() + header_.actionsOffset);
     rules_      = reinterpret_cast<const RuleRecord*>(raw_.data() + header_.rulesOffset);
+    spells_     = reinterpret_cast<const SpellRecord*>(raw_.data() + header_.spellsOffset);
+    refs_       = reinterpret_cast<const ReferenceRecord*>(raw_.data() + header_.refsOffset);
     searchIdx_  = reinterpret_cast<const SearchIndexEntry*>(raw_.data() + header_.searchIndexOffset);
     stringPool_ = reinterpret_cast<const char*>(raw_.data() + header_.stringPoolOffset);
 
@@ -88,6 +90,7 @@ bool SrdDatabase::getMonster(uint16_t monsterId, MonsterView& out) const {
         out.defenses     = hb.defenses.c_str();
         out.sensesLang   = hb.sensesLang.c_str();
         out.actionCount  = static_cast<int>(hb.actions.size());
+        out.terrainMask  = 0xFF;
         return true;
     }
 
@@ -117,6 +120,7 @@ bool SrdDatabase::getMonster(uint16_t monsterId, MonsterView& out) const {
     out.defenses     = str(m.defensesOffset);
     out.sensesLang   = str(m.sensesLangOffset);
     out.actionCount  = m.actionCount;
+    out.terrainMask  = m.terrainMask;
     return true;
 }
 
@@ -173,6 +177,59 @@ bool SrdDatabase::getConditionRule(int conditionIndex, RuleView& out) const {
     return false;
 }
 
+bool SrdDatabase::getSpell(uint16_t spellId, SpellView& out) const {
+    if (!loaded_) return false;
+    if (spellId >= HOMEBREW_SPELL_ID_BASE) {
+        size_t idx = static_cast<size_t>(spellId - HOMEBREW_SPELL_ID_BASE);
+        if (idx >= hbSpells_.size()) return false;
+        const HomebrewSpell& hs = hbSpells_[idx];
+        out.id            = hs.id;
+        out.isHomebrew    = true;
+        out.level         = hs.level;
+        out.ritual        = (hs.flags & 1) != 0;
+        out.concentration = (hs.flags & 2) != 0;
+        out.name          = hs.name.c_str();
+        out.school        = hs.school.c_str();
+        out.castingTime   = hs.castingTime.c_str();
+        out.range         = hs.range.c_str();
+        out.components    = hs.components.c_str();
+        out.duration      = hs.duration.c_str();
+        out.classes       = hs.classes.c_str();
+        out.body          = hs.body.c_str();
+        return true;
+    }
+
+    if (spellId >= header_.spellCount) return false;
+    const SpellRecord& s = spells_[spellId];
+    out.id            = s.id;
+    out.isHomebrew    = false;
+    out.level         = s.level;
+    out.ritual        = (s.flags & 1) != 0;
+    out.concentration = (s.flags & 2) != 0;
+    out.name          = str(s.nameOffset);
+    out.school        = str(s.schoolOffset);
+    out.castingTime   = str(s.castingTimeOffset);
+    out.range         = str(s.rangeOffset);
+    out.components    = str(s.componentsOffset);
+    out.duration      = str(s.durationOffset);
+    out.classes       = str(s.classesOffset);
+    out.body          = str(s.bodyOffset);
+    return true;
+}
+
+bool SrdDatabase::getReference(uint16_t refId, ReferenceView& out) const {
+    if (!loaded_ || refId >= header_.refCount) return false;
+    const ReferenceRecord& r = refs_[refId];
+    out.id       = r.id;
+    out.category = r.category;
+    out.subType  = r.subType;
+    out.name     = str(r.nameOffset);
+    out.subtitle = str(r.subtitleOffset);
+    out.body     = str(r.bodyOffset);
+    out.linkedId = r.linkedId;
+    return true;
+}
+
 bool SrdDatabase::matchesCrFilter(uint8_t crIndex, CrFilter filter) {
     switch (filter) {
         case CR_FILTER_ALL:     return true;
@@ -181,6 +238,23 @@ bool SrdDatabase::matchesCrFilter(uint8_t crIndex, CrFilter filter) {
         case CR_FILTER_5_10:    return crIndex >= 8 && crIndex <= 13;
         case CR_FILTER_11_PLUS: return crIndex >= 14;
         default:                return true;
+    }
+}
+
+bool SrdDatabase::matchesRefTab(uint8_t category, RefTabFilter tab) {
+    switch (tab) {
+        case REF_TAB_ALL:
+            return category != CAT_MONSTER;
+        case REF_TAB_SPELLS:
+            return category == CAT_SPELL || category == CAT_SRD_GAP;
+        case REF_TAB_COMBAT:
+            return category == CAT_RULE || category == CAT_CONDITION;
+        case REF_TAB_CLASSES:
+            return category == CAT_CLASS || category == CAT_RACE || category == CAT_SRD_GAP;
+        case REF_TAB_GEAR:
+            return category == CAT_EQUIPMENT;
+        default:
+            return category != CAT_MONSTER;
     }
 }
 
@@ -216,19 +290,16 @@ int SrdDatabase::scoreNameMatch(const char* normName, uint32_t nameMask,
     size_t nameLen = std::strlen(normName);
     if (qLen > nameLen) return 0;
 
-    // Tier 1: Exact prefix match
     if (std::strncmp(normName, normQuery, qLen) == 0) {
         return 1000 - static_cast<int>(nameLen);
     }
 
-    // Tier 2: Word-boundary prefix match (e.g. "dragon" -> "adult red dragon")
     for (size_t i = 1; i + qLen <= nameLen; ++i) {
         if (normName[i - 1] == ' ' && std::strncmp(normName + i, normQuery, qLen) == 0) {
             return 500 - static_cast<int>(i);
         }
     }
 
-    // Tier 3: Substring match
     const char* found = std::strstr(normName, normQuery);
     if (found) {
         int pos = static_cast<int>(found - normName);
@@ -236,6 +307,13 @@ int SrdDatabase::scoreNameMatch(const char* normName, uint32_t nameMask,
     }
 
     return 0;
+}
+
+bool SrdDatabase::hasHomebrewOverride(const char* normName) const {
+    for (const auto& hb : hbSearchEntries_) {
+        if (std::strcmp(hb.normalizedName, normName) == 0) return true;
+    }
+    return false;
 }
 
 void SrdDatabase::searchMonsters(const char* query, int typeFilter, CrFilter crFilter,
@@ -259,13 +337,7 @@ void SrdDatabase::searchMonsters(const char* query, int typeFilter, CrFilter crF
 
             int sc = scoreNameMatch(e.normalizedName, e.charBitmask, normQ, qLen, qMask);
             if (sc > 0) {
-                SearchHit hit;
-                hit.recordId   = e.recordId;
-                hit.category   = e.category;
-                hit.crOrLevel  = e.crOrLevel;
-                hit.subType    = e.subType;
-                hit.isHomebrew = isHb;
-                hit.score      = sc;
+                SearchHit hit{e.recordId, e.category, e.crOrLevel, e.subType, isHb, sc};
                 outResults.push_back(hit);
             }
         }
@@ -308,13 +380,7 @@ void SrdDatabase::searchRules(const char* query, bool conditionsOnly,
 
         int sc = scoreNameMatch(e.normalizedName, e.charBitmask, normQ, qLen, qMask);
         if (sc > 0) {
-            SearchHit hit;
-            hit.recordId   = e.recordId;
-            hit.category   = e.category;
-            hit.crOrLevel  = e.crOrLevel;
-            hit.subType    = e.subType;
-            hit.isHomebrew = false;
-            hit.score      = sc;
+            SearchHit hit{e.recordId, e.category, e.crOrLevel, e.subType, false, sc};
             outResults.push_back(hit);
         }
     }
@@ -331,7 +397,54 @@ void SrdDatabase::searchRules(const char* query, bool conditionsOnly,
     }
 }
 
-// Lightweight helper to extract a JSON string or integer value from an object slice
+void SrdDatabase::searchReference(const char* query, RefTabFilter tab,
+                                  std::vector<SearchHit>& outResults, int maxResults) const {
+    outResults.clear();
+    if (!loaded_) return;
+
+    char normQ[32];
+    uint32_t qMask = 0;
+    normalizeQuery(query, normQ, sizeof(normQ), qMask);
+    size_t qLen = std::strlen(normQ);
+
+    auto scanArray = [&](const SearchIndexEntry* arr, size_t count, bool isHb) {
+        for (size_t i = 0; i < count; ++i) {
+            const SearchIndexEntry& e = arr[i];
+            if (!matchesRefTab(e.category, tab)) continue;
+            // Hide Non-SRD gap stub if user provided a matching SD homebrew entry
+            if (!isHb && e.category == CAT_SRD_GAP && hasHomebrewOverride(e.normalizedName)) {
+                continue;
+            }
+            // Keep gap stubs out of empty-query browsing unless user is searching
+            if (qLen == 0 && e.category == CAT_SRD_GAP) continue;
+
+            int sc = scoreNameMatch(e.normalizedName, e.charBitmask, normQ, qLen, qMask);
+            if (sc > 0) {
+                // Slightly prioritize real SRD/Homebrew entries over gap stubs on ties
+                if (e.category == CAT_SRD_GAP) sc -= 15;
+                SearchHit hit{e.recordId, e.category, e.crOrLevel, e.subType, isHb, sc};
+                outResults.push_back(hit);
+            }
+        }
+    };
+
+    scanArray(searchIdx_, header_.searchEntryCount, false);
+    if (!hbSearchEntries_.empty()) {
+        scanArray(hbSearchEntries_.data(), hbSearchEntries_.size(), true);
+    }
+
+    if (qLen > 0) {
+        std::stable_sort(outResults.begin(), outResults.end(),
+                         [](const SearchHit& a, const SearchHit& b) {
+                             return a.score > b.score;
+                         });
+    }
+
+    if (maxResults > 0 && static_cast<int>(outResults.size()) > maxResults) {
+        outResults.resize(static_cast<size_t>(maxResults));
+    }
+}
+
 static std::string extractJsonStr(const std::string& obj, const char* key, const char* defVal = "") {
     std::string pat = std::string("\"") + key + "\"";
     size_t pos = obj.find(pat);
@@ -367,31 +480,15 @@ static int extractJsonInt(const std::string& obj, const char* key, int defVal) {
     return std::atoi(obj.c_str() + pos);
 }
 
-void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath) {
-    FILE* fp = std::fopen(filePath.c_str(), "rb");
-    if (!fp) return;
-    std::fseek(fp, 0, SEEK_END);
-    long sz = std::ftell(fp);
-    if (sz <= 0 || sz > 512 * 1024) {
-        std::fclose(fp);
-        return;
-    }
-    std::fseek(fp, 0, SEEK_SET);
-    std::string content(static_cast<size_t>(sz), '\0');
-    if (std::fread(&content[0], 1, content.size(), fp) != content.size()) {
-        std::fclose(fp);
-        return;
-    }
-    std::fclose(fp);
-
-    // Find "monsters" array in the JSON file
-    size_t arrPos = content.find("\"monsters\"");
+static void parseArrayObjects(const std::string& content, const char* arrayKey,
+                              std::vector<std::string>& outObjs) {
+    size_t arrPos = content.find(std::string("\"") + arrayKey + "\"");
     if (arrPos == std::string::npos) return;
     arrPos = content.find('[', arrPos);
     if (arrPos == std::string::npos) return;
 
     size_t pos = arrPos + 1;
-    while (pos < content.size() && hbMonsters_.size() < 256) {
+    while (pos < content.size()) {
         while (pos < content.size() && content[pos] != '{' && content[pos] != ']') ++pos;
         if (pos >= content.size() || content[pos] == ']') break;
 
@@ -410,7 +507,31 @@ void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath) {
                 }
             }
         }
-        std::string obj = content.substr(start, pos - start);
+        outObjs.push_back(content.substr(start, pos - start));
+    }
+}
+
+void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath) {
+    FILE* fp = std::fopen(filePath.c_str(), "rb");
+    if (!fp) return;
+    std::fseek(fp, 0, SEEK_END);
+    long sz = std::ftell(fp);
+    if (sz <= 0 || sz > 512 * 1024) {
+        std::fclose(fp);
+        return;
+    }
+    std::fseek(fp, 0, SEEK_SET);
+    std::string content(static_cast<size_t>(sz), '\0');
+    if (std::fread(&content[0], 1, content.size(), fp) != content.size()) {
+        std::fclose(fp);
+        return;
+    }
+    std::fclose(fp);
+
+    std::vector<std::string> monsterObjs;
+    parseArrayObjects(content, "monsters", monsterObjs);
+    for (const auto& obj : monsterObjs) {
+        if (hbMonsters_.size() >= 256) break;
         std::string name = extractJsonStr(obj, "name");
         if (name.empty()) continue;
 
@@ -455,13 +576,45 @@ void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath) {
         hbMonsters_.push_back(hb);
         hbSearchEntries_.push_back(se);
     }
+
+    std::vector<std::string> spellObjs;
+    parseArrayObjects(content, "spells", spellObjs);
+    for (const auto& obj : spellObjs) {
+        if (hbSpells_.size() >= 256) break;
+        std::string name = extractJsonStr(obj, "name");
+        if (name.empty()) continue;
+
+        HomebrewSpell hs;
+        hs.id          = static_cast<uint16_t>(HOMEBREW_SPELL_ID_BASE + hbSpells_.size());
+        hs.name        = name;
+        hs.level       = static_cast<uint8_t>(std::clamp(extractJsonInt(obj, "level", 1), 0, 9));
+        hs.school      = extractJsonStr(obj, "school", "Evocation");
+        hs.castingTime = extractJsonStr(obj, "casting_time", "1 action");
+        hs.range       = extractJsonStr(obj, "range", "60 feet");
+        hs.components  = extractJsonStr(obj, "components", "V, S");
+        hs.duration    = extractJsonStr(obj, "duration", "Instantaneous");
+        hs.classes     = extractJsonStr(obj, "classes", "Custom");
+        hs.body        = extractJsonStr(obj, "desc", "Custom SD card spell entry.");
+
+        SearchIndexEntry se{};
+        uint32_t mask = 0;
+        normalizeQuery(hs.name.c_str(), se.normalizedName, sizeof(se.normalizedName), mask);
+        se.charBitmask = mask;
+        se.recordId    = hs.id;
+        se.category    = CAT_SPELL;
+        se.crOrLevel   = hs.level;
+        se.subType     = 0;
+
+        hbSpells_.push_back(hs);
+        hbSearchEntries_.push_back(se);
+    }
 }
 
 int SrdDatabase::loadHomebrewDir(const char* dirPath) {
     DIR* dir = opendir(dirPath);
     if (!dir) return 0;
 
-    int before = static_cast<int>(hbMonsters_.size());
+    int before = static_cast<int>(hbMonsters_.size() + hbSpells_.size());
     struct dirent* ent = nullptr;
     while ((ent = readdir(dir)) != nullptr) {
         std::string fname = ent->d_name;
@@ -471,7 +624,7 @@ int SrdDatabase::loadHomebrewDir(const char* dirPath) {
         }
     }
     closedir(dir);
-    return static_cast<int>(hbMonsters_.size()) - before;
+    return static_cast<int>(hbMonsters_.size() + hbSpells_.size()) - before;
 }
 
 } // namespace dmtk

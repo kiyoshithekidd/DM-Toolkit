@@ -1,26 +1,39 @@
 #!/usr/bin/env python3
 """
-Offline SRD 5.1 Binary Compiler for DM's Toolkit.
-Ingests pinned 2014 SRD 5.1 JSON files from tools/raw_srd/ and compiles
-a fast, zero-allocation binary database at romfs/data/srd.bin.
+Offline SRD 5.1 Binary Compiler for DM's Toolkit (v2).
+Ingests pinned 2014 SRD 5.1 JSON files from tools/raw_srd/ and tools/srd_gaps.json,
+sanitizes all strings against IP rules, and emits romfs/data/srd.bin.
 """
 
 import json
 import os
 import re
 import struct
-import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 RAW_DIR = os.path.join(SCRIPT_DIR, "raw_srd")
+GAPS_PATH = os.path.join(SCRIPT_DIR, "srd_gaps.json")
 OUT_BIN = os.path.join(REPO_ROOT, "romfs", "data", "srd.bin")
 
-SRD_BIN_VERSION = 1
+SRD_BIN_VERSION = 2
 
 CAT_MONSTER = 0
+CAT_SPELL = 1
 CAT_RULE = 2
 CAT_CONDITION = 3
+CAT_CLASS = 4
+CAT_RACE = 5
+CAT_EQUIPMENT = 6
+CAT_SRD_GAP = 7
+
+EQ_WEAPON = 0
+EQ_ARMOR = 1
+EQ_GEAR = 2
+EQ_MAGIC_ITEM = 3
+
+GAP_NON_SRD = 0
+GAP_ALIAS = 1
 
 MONSTER_TYPE_MAP = {
     "aberration": 0,
@@ -38,6 +51,16 @@ MONSTER_TYPE_MAP = {
     "plant": 12,
     "undead": 13,
 }
+
+# Terrain bit indices matching dmtk::TerrainType
+T_DUNGEON = 1 << 0
+T_FOREST = 1 << 1
+T_CAVES = 1 << 2
+T_ROAD = 1 << 3
+T_SWAMP = 1 << 4
+T_MOUNTAIN = 1 << 5
+T_COASTAL = 1 << 6
+T_URBAN = 1 << 7
 
 CONDITION_INDEX_MAP = {
     "blinded": 0,
@@ -108,24 +131,20 @@ BLOCKED_TERMS = [
 def sanitize_text(text: str) -> str:
     if not text:
         return ""
-    # Replace unicode dashes and smart quotes with clean ASCII
     text = text.replace("\u2014", " - ").replace("\u2013", "-")
     text = text.replace("\u2018", "'").replace("\u2019", "'")
     text = text.replace("\u201c", '"').replace("\u201d", '"')
     text = text.replace("\u00d7", "x")
-    # Normalize any spelled-out game master title or protected example creature
     text = re.sub(r"\b" + "Dungeon " + r"Master's\b", "DM's", text, flags=re.IGNORECASE)
     text = re.sub(r"\b" + "Dungeon " + r"Masters\b", "DMs", text, flags=re.IGNORECASE)
     text = re.sub(r"\b" + "Dungeon " + r"Master\b", "DM", text, flags=re.IGNORECASE)
     text = re.sub(r"\b" + "mind " + r"flayer's\b", "psychic horror's", text, flags=re.IGNORECASE)
     text = re.sub(r"\b" + "mind " + r"flayer\b", "psychic horror", text, flags=re.IGNORECASE)
-    # Collapse excess whitespace while keeping newlines
+    text = re.sub(r"\b" + "beh" + r"older\b", "eye tyrant", text, flags=re.IGNORECASE)
     lines = [re.sub(r"[ \t]+", " ", ln).strip() for ln in text.splitlines()]
     text = "\n".join(lines).strip()
-    # Strip markdown heading hashes and bold/italic asterisks for clean 3DS text display
     text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
     text = text.replace("***", "").replace("**", "").replace("__", "")
-    # Verify against strict IP blocklist
     lower = text.lower()
     for term in BLOCKED_TERMS:
         if term in lower:
@@ -161,6 +180,45 @@ def char_bitmask(norm_name: str) -> int:
     return mask
 
 
+def infer_terrain_mask(m: dict, mtype: int) -> int:
+    name = m.get("name", "").lower()
+    speed = m.get("speed", {})
+    has_swim = "swim" in speed
+    has_fly = "fly" in speed
+    has_burrow = "burrow" in speed
+
+    mask = 0
+    if mtype in (13, 3, 11, 7, 0):  # Undead, Construct, Ooze, Fiend, Aberration
+        mask |= T_DUNGEON | T_CAVES
+    if mtype == 12 or mtype == 6:  # Plant, Fey
+        mask |= T_FOREST | T_SWAMP
+    if mtype == 9:  # Humanoid
+        mask |= T_ROAD | T_URBAN | T_DUNGEON | T_FOREST
+    if mtype == 8:  # Giant
+        mask |= T_MOUNTAIN | T_CAVES
+    if mtype == 4:  # Dragon
+        mask |= T_MOUNTAIN | T_CAVES | T_DUNGEON
+    if mtype in (1, 10):  # Beast, Monstrosity
+        mask |= T_FOREST | T_ROAD | T_MOUNTAIN
+    if has_swim:
+        mask |= T_COASTAL | T_SWAMP
+    if has_fly:
+        mask |= T_MOUNTAIN | T_FOREST
+    if has_burrow:
+        mask |= T_CAVES
+
+    if any(w in name for w in ("goblin", "orc", "kobold", "gnoll", "bandit", "wolf", "boar", "bear", "spider")):
+        mask |= T_FOREST | T_ROAD | T_CAVES
+    if any(w in name for w in ("lizard", "frog", "toad", "crocodile", "hydra", "troll", "hag", "shambling")):
+        mask |= T_SWAMP
+    if any(w in name for w in ("crab", "shark", "sahuagin", "merfolk", "kraken", "water", "sea", "pirate")):
+        mask |= T_COASTAL
+    if any(w in name for w in ("guard", "spy", "assassin", "noble", "thug", "cult", "mage", "priest", "rat", "mimic")):
+        mask |= T_URBAN | T_DUNGEON
+
+    return mask if mask != 0 else (T_DUNGEON | T_ROAD)
+
+
 class StringPool:
     def __init__(self):
         self.buf = bytearray(b"\x00")
@@ -191,7 +249,6 @@ def compact_action_summary(action: dict) -> str:
         if dmg_parts:
             return f"{sign}{atk_bonus} to hit, {', '.join(dmg_parts)}"
         return f"{sign}{atk_bonus} to hit"
-    # Otherwise take first sentence up to 72 chars
     first_sent = desc.split(".")[0].strip()
     if len(first_sent) > 72:
         first_sent = first_sent[:69].rstrip() + "..."
@@ -205,18 +262,36 @@ def compile_srd():
         raw_conditions = json.load(f)
     with open(os.path.join(RAW_DIR, "5e-SRD-Rules.json"), "r", encoding="utf-8") as f:
         raw_rules = json.load(f)
+    with open(os.path.join(RAW_DIR, "5e-SRD-Spells.json"), "r", encoding="utf-8") as f:
+        raw_spells = json.load(f)
+    with open(os.path.join(RAW_DIR, "5e-SRD-Classes.json"), "r", encoding="utf-8") as f:
+        raw_classes = json.load(f)
+    with open(os.path.join(RAW_DIR, "5e-SRD-Subclasses.json"), "r", encoding="utf-8") as f:
+        raw_subclasses = json.load(f)
+    with open(os.path.join(RAW_DIR, "5e-SRD-Races.json"), "r", encoding="utf-8") as f:
+        raw_races = json.load(f)
+    with open(os.path.join(RAW_DIR, "5e-SRD-Equipment.json"), "r", encoding="utf-8") as f:
+        raw_equipment = json.load(f)
+    with open(os.path.join(RAW_DIR, "5e-SRD-Magic-Items.json"), "r", encoding="utf-8") as f:
+        raw_magic_items = json.load(f)
+    with open(os.path.join(RAW_DIR, "5e-SRD-Feats.json"), "r", encoding="utf-8") as f:
+        raw_feats = json.load(f)
+    with open(GAPS_PATH, "r", encoding="utf-8") as f:
+        gaps_cfg = json.load(f)
 
-    # Sort monsters alphabetically by name for clean browsing
     raw_monsters.sort(key=lambda m: m.get("name", "").lower())
+    raw_spells.sort(key=lambda s: (int(s.get("level", 0)), s.get("name", "").lower()))
 
     pool = StringPool()
     monster_bytes = bytearray()
     action_bytes = bytearray()
     rule_bytes = bytearray()
+    spell_bytes = bytearray()
+    ref_bytes = bytearray()
     search_entries = []
 
+    # 1. Monsters
     total_actions = 0
-
     for idx, m in enumerate(raw_monsters):
         name = m.get("name", "Unknown")
         mtype_raw = m.get("type", "beast").lower()
@@ -239,16 +314,10 @@ def compile_srd():
         hit_dice = m.get("hit_points_roll", m.get("hit_dice", ""))
 
         speed_dict = m.get("speed", {})
-        speed_parts = []
-        for k, v in speed_dict.items():
-            if k == "walk":
-                speed_parts.append(str(v))
-            else:
-                speed_parts.append(f"{k} {v}")
+        speed_parts = [str(v) if k == "walk" else f"{k} {v}" for k, v in speed_dict.items()]
         speed_str = ", ".join(speed_parts)
 
-        saves = []
-        skills = []
+        saves, skills = [], []
         for prof in m.get("proficiencies", []):
             pname = prof.get("proficiency", {}).get("name", "")
             pval = prof.get("value", 0)
@@ -257,8 +326,6 @@ def compile_srd():
                 saves.append(f"{pname.replace('Saving Throw: ', '')} {sign}{pval}")
             elif pname.startswith("Skill: "):
                 skills.append(f"{pname.replace('Skill: ', '')} {sign}{pval}")
-        saves_str = ", ".join(saves)
-        skills_str = ", ".join(skills)
 
         def_parts = []
         if m.get("damage_vulnerabilities"):
@@ -270,7 +337,6 @@ def compile_srd():
         if m.get("condition_immunities"):
             cnames = [c.get("name", "") for c in m["condition_immunities"]]
             def_parts.append("Cond Imm: " + ", ".join(cnames))
-        defenses_str = " | ".join(def_parts)
 
         senses_dict = m.get("senses", {})
         sense_parts = [f"{k.replace('_', ' ')} {v}" for k, v in senses_dict.items()]
@@ -305,74 +371,40 @@ def compile_srd():
                 ab = item.get("attack_bonus", None)
                 atk_b = max(-127, min(127, int(ab))) if ab is not None else -128
                 action_bytes.extend(
-                    struct.pack(
-                        "<IIIbBH",
-                        pool.add(aname),
-                        pool.add(asum),
-                        pool.add(adesc),
-                        atk_b,
-                        sec_type,
-                        0,
-                    )
+                    struct.pack("<IIIbBH", pool.add(aname), pool.add(asum), pool.add(adesc), atk_b, sec_type, 0)
                 )
                 total_actions += 1
                 act_count += 1
 
         cr_idx = cr_to_index(m.get("challenge_rating", 0))
         xp_val = int(m.get("xp", 0))
+        tmask = infer_terrain_mask(m, mtype)
 
         monster_bytes.extend(
             struct.pack(
                 "<HBBIIIIIIIIIIHHBBBBBBbBHH",
-                idx,
-                mtype,
-                cr_idx,
-                pool.add(name),
-                pool.add(size_align),
-                pool.add(ac_note),
-                pool.add(hit_dice),
-                pool.add(speed_str),
-                pool.add(saves_str),
-                pool.add(skills_str),
-                pool.add(defenses_str),
-                pool.add(senses_lang),
-                xp_val,
-                ac_val,
-                hp_val,
-                str_s,
-                dex_s,
-                con_s,
-                int_s,
-                wis_s,
-                cha_s,
-                init_bonus,
-                act_count,
-                first_action_idx,
-                0,  # terrainMask (populated in Slice 2)
+                idx, mtype, cr_idx,
+                pool.add(name), pool.add(size_align), pool.add(ac_note),
+                pool.add(hit_dice), pool.add(speed_str), pool.add(", ".join(saves)),
+                pool.add(", ".join(skills)), pool.add(" | ".join(def_parts)), pool.add(senses_lang),
+                xp_val, ac_val, hp_val,
+                str_s, dex_s, con_s, int_s, wis_s, cha_s,
+                init_bonus, act_count, first_action_idx, tmask,
             )
         )
 
         norm = normalize_search_name(name)
         search_entries.append((norm, char_bitmask(norm), idx, CAT_MONSTER, cr_idx, mtype))
 
-    # Compile Conditions (0..14) + Combat Rules
+    # 2. Conditions & Combat Rules
     rule_id = 0
-    # Sort conditions to match ConditionBit order
     raw_conditions.sort(key=lambda c: CONDITION_INDEX_MAP.get(c.get("index", ""), 99))
     for c in raw_conditions:
         cname = c.get("name", "Condition")
         cidx = CONDITION_INDEX_MAP.get(c.get("index", "").lower(), 0xFF)
         body = "\n".join(c.get("desc", []))
         rule_bytes.extend(
-            struct.pack(
-                "<HBBIII",
-                rule_id,
-                1,
-                cidx,
-                pool.add(cname),
-                pool.add("Condition"),
-                pool.add(body),
-            )
+            struct.pack("<HBBIII", rule_id, 1, cidx, pool.add(cname), pool.add("Condition"), pool.add(body))
         )
         norm = normalize_search_name(cname)
         search_entries.append((norm, char_bitmask(norm), rule_id, CAT_CONDITION, 0, cidx))
@@ -386,19 +418,179 @@ def compile_srd():
         rname = r.get("name", rkey)
         rbody = r.get("desc", "")
         rule_bytes.extend(
-            struct.pack(
-                "<HBBIII",
-                rule_id,
-                0,
-                0xFF,
-                pool.add(rname),
-                pool.add("Combat Rule"),
-                pool.add(rbody),
-            )
+            struct.pack("<HBBIII", rule_id, 0, 0xFF, pool.add(rname), pool.add("Combat Rule"), pool.add(rbody))
         )
         norm = normalize_search_name(rname)
         search_entries.append((norm, char_bitmask(norm), rule_id, CAT_RULE, 0, 0))
         rule_id += 1
+
+    # Add Grappler feat as a Rules entry with SRD note
+    for feat in raw_feats:
+        fname = feat.get("name", "Feat")
+        fbody = "\n".join(feat.get("desc", []))
+        fbody += "\n\nNote: Grappler is the only Feat included in the open SRD 5.1."
+        rule_bytes.extend(
+            struct.pack("<HBBIII", rule_id, 0, 0xFF, pool.add(fname), pool.add("Feat (SRD 5.1)"), pool.add(fbody))
+        )
+        norm = normalize_search_name(fname)
+        search_entries.append((norm, char_bitmask(norm), rule_id, CAT_RULE, 0, 0))
+        rule_id += 1
+
+    # 3. Spells (319)
+    spell_id_by_name = {}
+    for sidx, sp in enumerate(raw_spells):
+        sname = sp.get("name", "Spell")
+        level = int(sp.get("level", 0))
+        flags = (1 if sp.get("ritual") else 0) | (2 if sp.get("concentration") else 0)
+        school = sp.get("school", {}).get("name", "Magic")
+        ctime = sp.get("casting_time", "1 action")
+        srange = sp.get("range", "Self")
+        comps = ", ".join(sp.get("components", []))
+        if sp.get("material"):
+            comps += f" ({sp['material']})"
+        dur = sp.get("duration", "Instantaneous")
+        classes = ", ".join(c.get("name", "") for c in sp.get("classes", []))
+        body = "\n".join(sp.get("desc", []))
+        if sp.get("higher_level"):
+            body += "\n\nAt Higher Levels: " + "\n".join(sp["higher_level"])
+
+        spell_bytes.extend(
+            struct.pack(
+                "<HBBIIIIIIII",
+                sidx, level, flags,
+                pool.add(sname), pool.add(school), pool.add(ctime),
+                pool.add(srange), pool.add(comps), pool.add(dur),
+                pool.add(classes), pool.add(body),
+            )
+        )
+        spell_id_by_name[sname.lower()] = sidx
+        norm = normalize_search_name(sname)
+        search_entries.append((norm, char_bitmask(norm), sidx, CAT_SPELL, level, 0))
+
+    # 4. Classes (+ Subclasses), Races, Equipment, Magic Items, and Gap Stubs -> ReferenceRecord
+    ref_id = 0
+    sub_by_class = {}
+    for sub in raw_subclasses:
+        cname = sub.get("class", {}).get("name", "")
+        sub_by_class.setdefault(cname, []).append(sub)
+
+    for cl in raw_classes:
+        cname = cl.get("name", "Class")
+        hd = cl.get("hit_die", 8)
+        saves = ", ".join(s.get("name", "") for s in cl.get("saving_throws", []))
+        profs = ", ".join(p.get("name", "") for p in cl.get("proficiencies", [])[:8])
+        subs = sub_by_class.get(cname, [])
+        sub_names = ", ".join(s.get("name", "") for s in subs) if subs else "None"
+
+        subtitle = f"Hit Die d{hd} | Saves: {saves}"
+        body_parts = [f"Proficiencies: {profs}", f"\nSRD Subclass Included: {sub_names}"]
+        for s in subs:
+            body_parts.append(f"\n[{s.get('name', '')}] " + "\n".join(s.get("desc", [])))
+        body_parts.append("\nNote: Only 1 subclass per class is in the open SRD 5.1.")
+        body = "\n".join(body_parts)
+
+        ref_bytes.extend(
+            struct.pack("<HBBIIIHH", ref_id, CAT_CLASS, 0, pool.add(cname), pool.add(subtitle), pool.add(body), 0xFFFF, 0)
+        )
+        norm = normalize_search_name(cname)
+        search_entries.append((norm, char_bitmask(norm), ref_id, CAT_CLASS, 0, 0))
+        ref_id += 1
+
+    for rc in raw_races:
+        rname = rc.get("name", "Race")
+        speed = rc.get("speed", 30)
+        size = rc.get("size", "Medium")
+        bonuses = ", ".join(
+            f"{b.get('ability_score', {}).get('name', '')} +{b.get('bonus', 0)}"
+            for b in rc.get("ability_bonuses", [])
+        )
+        traits = ", ".join(t.get("name", "") for t in rc.get("traits", []))
+        subtitle = f"{size} | Speed {speed} ft. | {bonuses}"
+        body = f"{rc.get('size_description', '')}\n\n{rc.get('language_desc', '')}"
+        if traits:
+            body += f"\n\nTraits: {traits}"
+
+        ref_bytes.extend(
+            struct.pack("<HBBIIIHH", ref_id, CAT_RACE, 0, pool.add(rname), pool.add(subtitle), pool.add(body), 0xFFFF, 0)
+        )
+        norm = normalize_search_name(rname)
+        search_entries.append((norm, char_bitmask(norm), ref_id, CAT_RACE, 0, 0))
+        ref_id += 1
+
+    for eq in raw_equipment:
+        ename = eq.get("name", "Item")
+        cat_name = eq.get("equipment_category", {}).get("name", "Gear")
+        cost = eq.get("cost", {})
+        cost_str = f"{cost.get('quantity', 0)} {cost.get('unit', 'gp')}" if cost else "-"
+        weight = eq.get("weight", 0)
+
+        if "Weapon" in cat_name:
+            sub_t = EQ_WEAPON
+            dmg = eq.get("damage", {})
+            dmg_str = f"{dmg.get('damage_dice', '')} {dmg.get('damage_type', {}).get('name', '')}".strip()
+            props = ", ".join(p.get("name", "") for p in eq.get("properties", []))
+            subtitle = f"{eq.get('category_range', 'Weapon')} | {dmg_str or 'Special'} | {cost_str}"
+            body = f"Cost: {cost_str}\nWeight: {weight} lb.\nDamage: {dmg_str or '-'}\nProperties: {props or 'None'}"
+        elif "Armor" in cat_name:
+            sub_t = EQ_ARMOR
+            ac = eq.get("armor_class", {})
+            ac_str = f"AC {ac.get('base', 10)}" + (" + DEX" if ac.get("dex_bonus") else "")
+            subtitle = f"{eq.get('armor_category', 'Armor')} Armor | {ac_str} | {cost_str}"
+            body = f"Cost: {cost_str}\nWeight: {weight} lb.\nArmor Class: {ac_str}"
+        else:
+            sub_t = EQ_GEAR
+            subtitle = f"{cat_name} | {cost_str} | {weight} lb."
+            desc_list = eq.get("desc", [])
+            body = "\n".join(desc_list) if desc_list else f"Category: {cat_name}\nCost: {cost_str}\nWeight: {weight} lb."
+
+        ref_bytes.extend(
+            struct.pack("<HBBIIIHH", ref_id, CAT_EQUIPMENT, sub_t, pool.add(ename), pool.add(subtitle), pool.add(body), 0xFFFF, 0)
+        )
+        norm = normalize_search_name(ename)
+        search_entries.append((norm, char_bitmask(norm), ref_id, CAT_EQUIPMENT, 0, sub_t))
+        ref_id += 1
+
+    for mi in raw_magic_items:
+        mname = mi.get("name", "Magic Item")
+        rarity = mi.get("rarity", {}).get("name", "Varies")
+        cat_name = mi.get("equipment_category", {}).get("name", "Wondrous Item")
+        subtitle = f"{rarity} {cat_name}"
+        body = "\n".join(mi.get("desc", []))
+
+        ref_bytes.extend(
+            struct.pack("<HBBIIIHH", ref_id, CAT_EQUIPMENT, EQ_MAGIC_ITEM, pool.add(mname), pool.add(subtitle), pool.add(body), 0xFFFF, 0)
+        )
+        norm = normalize_search_name(mname)
+        search_entries.append((norm, char_bitmask(norm), ref_id, CAT_EQUIPMENT, 0, EQ_MAGIC_ITEM))
+        ref_id += 1
+
+    # 5. Renamed SRD Aliases & Non-SRD Gap Stubs
+    for al in gaps_cfg.get("renamed_aliases", []):
+        alias_name = al["alias"]
+        srd_target = al["srd_name"]
+        target_id = spell_id_by_name.get(srd_target.lower(), 0xFFFF)
+        subtitle = f"SRD Open Name: {srd_target}"
+        body = f"In the open SRD 5.1, '{alias_name}' is published under the generic name '{srd_target}'."
+        ref_bytes.extend(
+            struct.pack("<HBBIIIHH", ref_id, CAT_SRD_GAP, GAP_ALIAS, pool.add(alias_name), pool.add(subtitle), pool.add(body), target_id, 0)
+        )
+        norm = normalize_search_name(alias_name)
+        search_entries.append((norm, char_bitmask(norm), ref_id, CAT_SRD_GAP, 0, GAP_ALIAS))
+        ref_id += 1
+
+    for gp in gaps_cfg.get("non_srd_gaps", []):
+        gname = gp["name"]
+        subtitle = f"[Non-SRD] {gp['kind']}"
+        body = (
+            f"Not Included in Open SRD 5.1\n\n{gp['note']}\n\n"
+            "Tip: You can add custom entries on your SD card under sdmc:/3ds/DM_Toolkit/homebrew/."
+        )
+        ref_bytes.extend(
+            struct.pack("<HBBIIIHH", ref_id, CAT_SRD_GAP, GAP_NON_SRD, pool.add(gname), pool.add(subtitle), pool.add(body), 0xFFFF, 0)
+        )
+        norm = normalize_search_name(gname)
+        search_entries.append((norm, char_bitmask(norm), ref_id, CAT_SRD_GAP, 0, GAP_NON_SRD))
+        ref_id += 1
 
     search_bytes = bytearray()
     for norm, mask, rec_id, cat, cr_lvl, sub in search_entries:
@@ -408,24 +600,30 @@ def compile_srd():
             struct.pack("<32sIHBBB3s", nb_padded, mask, rec_id, cat, cr_lvl, sub, b"\x00\x00\x00")
         )
 
-    header_size = 48
+    header_size = 64
     monsters_offset = header_size
     actions_offset = monsters_offset + len(monster_bytes)
     rules_offset = actions_offset + len(action_bytes)
-    search_offset = rules_offset + len(rule_bytes)
+    spells_offset = rules_offset + len(rule_bytes)
+    refs_offset = spells_offset + len(spell_bytes)
+    search_offset = refs_offset + len(ref_bytes)
     string_offset = search_offset + len(search_bytes)
 
     header = struct.pack(
-        "<4sIIIIIIIIIII",
+        "<4sIIIIIIIIIIIIIII",
         b"DMTK",
         SRD_BIN_VERSION,
         len(raw_monsters),
         total_actions,
         rule_id,
+        len(raw_spells),
+        ref_id,
         len(search_entries),
         monsters_offset,
         actions_offset,
         rules_offset,
+        spells_offset,
+        refs_offset,
         search_offset,
         string_offset,
         len(pool.buf),
@@ -437,13 +635,15 @@ def compile_srd():
         out.write(monster_bytes)
         out.write(action_bytes)
         out.write(rule_bytes)
+        out.write(spell_bytes)
+        out.write(ref_bytes)
         out.write(search_bytes)
         out.write(pool.buf)
 
     total_kb = os.path.getsize(OUT_BIN) / 1024.0
     print(
-        f"Compiled {OUT_BIN}: {len(raw_monsters)} monsters, {total_actions} actions, "
-        f"{rule_id} rules/conditions, {len(search_entries)} search entries ({total_kb:.1f} KB)"
+        f"Compiled {OUT_BIN}: {len(raw_monsters)} monsters, {len(raw_spells)} spells, "
+        f"{ref_id} refs/gaps, {rule_id} rules, {len(search_entries)} search entries ({total_kb:.1f} KB)"
     )
 
 

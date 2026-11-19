@@ -30,7 +30,8 @@ srd:
 
 test: srd
 	@g++ -std=c++17 -Wall -Wextra -O2 -Iinclude \
-		tests/test_core.cpp source/srd_db.cpp source/combat_tracker.cpp source/campaign_io.cpp \
+		tests/test_core.cpp source/srd_db.cpp source/combat_tracker.cpp \
+		source/campaign_io.cpp source/generators.cpp source/dice_roller.cpp \
 		-o test_runner
 	@./test_runner
 

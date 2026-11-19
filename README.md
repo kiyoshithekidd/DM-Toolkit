@@ -1,24 +1,62 @@
 # DM-Toolkit
 
-A DM-only companion app for the Nintendo 3DS. It puts the whole DM screen in one place: the monster manual, the fight tracker, the dice, and the rules reference.
+A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole DM screen in one place: the monster manual, the fight tracker, the 3D dice tray, the tabletop generators, and the pocket SRD rules reference.
 
-## What it does
+## Features
 
-- **Monster manual**: searchable SRD monsters with full stat blocks, filterable by type and challenge rating.
-- **Fight tracker**: build encounters ahead of time or add monsters on the fly, roll initiative, and track HP and abilities round by round.
-- **Dice roller**: physics-feel rolls for d4 through d100, with modifiers and advantage/disadvantage.
-- **Rules reference**: pocket SRD lookups for spells, races, class abilities, weapons, armor, gear, and conditions.
-- **Generators**: NPC names, loot, and random encounters by party level and terrain.
-- **Campaign saves**: one save file per campaign, each with its own party and preplanned encounters.
+* **Fight Tracker (Home Screen):**
+  * Dual-column top screen: live Initiative Ladder (round counter, HP bars, condition badges) on the left and the selected monster's full stat block and attacks on the right.
+  * One-handed bottom touchscreen controls: big `-10 / -5 / -1 / +1 / +5` HP buttons, 15-condition toggle grid (`Blinded`, `Poisoned`, `Prone`, `Stunned`, etc.), `Init- / Init+` overrides for physical table rolls, mid-fight `[+ Monster]` additions, 1-tap **Combat Rules** drawer, and `[Roll Loot]` on end-fight.
+* **Monster Manual:**
+  * All **334 SRD 5.1 monsters** with full stat blocks, traits, actions, reactions, and legendary actions.
+  * Instant always-live bottom-screen QWERTY search (~20-30 us) plus **Monster Type** and **CR** filter pills, with a 1-tap `[+ Fight]` button on every row.
+* **3D Physics-Feel Dice Roller with Custom Skins:**
+  * Live 3D tumbling polyhedral dice (`d4`, `d6`, `d8`, `d10`, `d12`, `d20`, `d100`) with felt floor bounces, tray wall rebounds, modifiers (`-10` to `+20`), dual-die **Advantage / Disadvantage**, and roll history.
+  * **5 Dice Skins:** *Royal Gold* (default), *Obsidian Gold*, *Crimson Ruby*, *Arcane Sapphire*, and *Ivory Bone*.
+  * **5 Dice Tray Skins:** *Emerald Felt* (default), *Crimson Velvet*, *Royal Navy*, *Tavern Leather*, and *Amethyst Slate*.
+* **Pocket SRD Rules Reference:**
+  * Searchable across **319 Spells**, **12 Classes (+ 12 SRD Subclasses)**, **9 Races**, **237 Weapons/Armor/Gear**, **362 Magic Items**, **15 Conditions**, **33 Combat Rules**, and **Grappler**.
+  * Transparently resolves renamed SRD spell aliases and flags `[Non-SRD]` gaps instead of hiding them.
+* **Tabletop Generators:**
+  * **Random Encounter Generator** tuned to active campaign party level, party size, 8 terrains, and SRD XP difficulty thresholds, with 1-tap `[Send to Fight Tracker]`.
+  * **NPC Generator** (name, ancestry, occupation, roleplay quirk) and **Loot Generator** (individual pocket coins or full treasure hoards with gems and SRD magic items).
+* **Multi-Campaign Saves & SD Homebrew Overlay:**
+  * One atomic JSON save file per campaign in `sdmc:/3ds/DM_Toolkit/campaigns/` (party roster, preplanned encounters, and auto-saved active fight).
+  * Optional SD card overlay in `sdmc:/3ds/DM_Toolkit/homebrew/*.json` to add custom monsters and spells (automatically superseding matching `[Non-SRD]` stubs).
 
-## Status
+## Controls (Nintendo 3DS)
 
-Early design. See [PRD.md](PRD.md) for the full product spec.
+* **Touchscreen:** Primary one-handed navigation, live search keypad, HP adjustments, condition toggles, dice rolls, and skin cycling.
+* **D-Pad Up / Down:** Select combatant in Fight Tracker, scroll search results, or select party hero.
+* **Circle Pad / C-Stick Up / Down (or L / R in Manual & Rules):** Scroll long stat blocks, spells, and rule descriptions.
+* **A / R (Fight Tracker):** Advance to the next turn (or cycle rules when the Combat Rules drawer is open).
+* **A / X (Dice Tray):** Roll the selected die. **L / R:** Cycle Dice Skin and Tray Skin.
+* **B:** Close Combat Rules drawer or condition overlay.
+* **START:** Save active campaign/fight and exit cleanly.
 
-## Platform
+## Building from Source
 
-Nintendo 3DS homebrew. Ships as .3dsx first, with a .cia build later so it launches from the home menu.
+* **Host Unit Tests & SRD Compiler (Linux/macOS/WSL):**
+  ```bash
+  make test
+  ```
+* **Nintendo 3DS `.3dsx` and `.cia` (requires `devkitPro` / `devkitARM`, `bannertool`, `makerom`):**
+  ```bash
+  make
+  make cia
+  ```
+  Prebuilt `DM_Toolkit.3dsx` and `DM_Toolkit.cia` artifacts are also built automatically on every push and pull request via GitHub Actions.
 
-## Content and IP
+## Documentation & Project Structure
 
-Reference content comes from the SRD 5.1, free to use under CC-BY-4.0 with attribution. All other content is original. Generic fantasy terms only: no "Dungeons & Dragons", "D&D", "Dungeon Master" spelled out, or other trademarks.
+* [PRD.md](PRD.md): Full product specification and v1 scope.
+* [PERSONAS.md](PERSONAS.md): User personas (Kitchen Table DM first).
+* [ARCHITECTURE.md](ARCHITECTURE.md): Hardware toolchain, SRD binary layout, UI architecture, and playtest checklists.
+* `tools/compile_srd.py`: Offline SRD 5.1 binary compiler (`romfs/data/srd.bin`) with automated IP sanitization.
+* `source/` & `include/`: C++17 core engine (`srd_db`, `combat_tracker`, `campaign_io`, `generators`, `dice_roller`) and `citro2d` 3DS UI (`main`, `dice_view`).
+
+## Content and IP Attribution
+
+This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
+
+All other content and code in this repository is original. Generic fantasy terms only.
