@@ -12,7 +12,9 @@ BUILD           := build
 SOURCES         := source
 DATA            := data
 INCLUDES        := include
+GRAPHICS        := gfx
 ROMFS           := romfs
+GFXBUILD        := $(ROMFS)/gfx
 
 # Host-only targets (do not require DEVKITPRO)
 ifeq ($(filter-out test srd,$(MAKECMDGOALS)),)
@@ -63,18 +65,23 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 export OUTPUT  := $(CURDIR)/$(TARGET)
 export TOPDIR  := $(CURDIR)
 export VPATH   := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
+                  $(foreach dir,$(GRAPHICS),$(CURDIR)/$(dir)) \
                   $(foreach dir,$(DATA),$(CURDIR)/$(dir))
 export DEPSDIR := $(CURDIR)/$(BUILD)
 
 CFILES   := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
 CPPFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 SFILES   := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
+GFXFILES := $(foreach dir,$(GRAPHICS),$(notdir $(wildcard $(dir)/*.t3s)))
 
 ifeq ($(strip $(CPPFILES)),)
 	export LD := $(CC)
 else
 	export LD := $(CXX)
 endif
+
+export ROMFS_T3XFILES := $(patsubst %.t3s, $(GFXBUILD)/%.t3x, $(GFXFILES))
+export T3XHFILES      := $(patsubst %.t3s, $(BUILD)/%.h, $(GFXFILES))
 
 export OFILES   := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
 export INCLUDE  := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
@@ -95,11 +102,16 @@ endif
 
 .PHONY: all clean generate cia
 
-all: $(BUILD) $(DEPSDIR)
+all: $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES)
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 $(BUILD):
 	@mkdir -p $@
+
+ifneq ($(GFXBUILD),$(BUILD))
+$(GFXBUILD):
+	@mkdir -p $@
+endif
 
 ifneq ($(DEPSDIR),$(BUILD))
 $(DEPSDIR):
@@ -116,7 +128,11 @@ cia: all generate
 
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).3dsx $(TARGET).cia $(OUTPUT).smdh $(TARGET).elf test_runner
+	@rm -fr $(BUILD) $(TARGET).3dsx $(TARGET).cia $(OUTPUT).smdh $(TARGET).elf $(GFXBUILD) test_runner
+
+$(GFXBUILD)/%.t3x $(BUILD)/%.h : %.t3s
+	@echo $(notdir $<)
+	@tex3ds -i $< -H $(BUILD)/$*.h -d $(DEPSDIR)/$*.d -o $(GFXBUILD)/$*.t3x
 
 else
 

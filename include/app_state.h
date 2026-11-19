@@ -28,6 +28,7 @@ enum FightSubPanel : uint8_t {
 };
 
 struct AppState {
+    bool          showTitleSplash = true;
     AppMode       mode       = MODE_FIGHT;
     FightSubPanel fightPanel = FIGHT_PANEL_MAIN;
 

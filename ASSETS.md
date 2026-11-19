@@ -1,53 +1,35 @@
 # DM's Toolkit, Asset Plan
 
 Date: November 19, 2026
-Status: Draft. Grounded in PRD.md. The architecture plan is not on the repo yet, so packaging specs here follow the standard 3DS homebrew layout and will be confirmed against ARCHITECTURE.md when it lands.
+Status: Complete for v1.1. All packaging, title screen, and section icon assets are generated and wired into the `tex3ds` sprite atlas pipeline (`gfx/sprites.t3s` -> `romfs/gfx/sprites.t3x`).
 
 ## How assets work in this app
 
-- Image assets live in gfx/ as PNGs, compiled into romfs/ at build time (same pipeline as Bard Beats: sprites.t3s and tex3ds, to be confirmed by the architecture).
-- The app is text-heavy: the monster manual, the fight tracker, and the reference are text. Art is for the frame around the text, not the content.
-- The dice roller draws the die live in code (gold die on dark green felt). The die itself is not an image asset.
+- Image assets live in `gfx/` as PNGs and are compiled into `romfs/gfx/sprites.t3x` at build time via `tex3ds` (`gfx/sprites.t3s`).
+- The app is text-heavy: the monster manual, the fight tracker, and the reference are text. Art frames the experience without slowing down table lookups.
+- The 3D dice roller draws live polyhedral dice and customizable tray skins in code (`source/dice_view.cpp`), supporting 5 Dice Skins and 5 Dice Tray Skins with zero extra ROM bloat.
 
 ## App packaging
 
 | Asset | Spec | Purpose | Status |
-| icon.png | 48x48 PNG | Home menu icon, used to generate the SMDH | Needed |
-| banner.png | 256x128 PNG | CIA HOME Menu banner image | Needed |
-| banner audio | 2-second jingle, optional | CIA banner audio (dice roll sound or short lute note) | TBD |
+| :--- | :--- | :--- | :--- |
+| `icon.png` | `48x48` PNG | HOME Menu icon & SMDH (gold d20 on emerald felt & walnut crest) | Done |
+| `gfx/banner.png` | `256x128` PNG | CIA HOME Menu banner (candlelit tavern DM desk, bestiary, gold d20 tray) | Done |
+| `gfx/banner.wav` | 1.0s PCM WAV | CIA HOME Menu chime | Done |
 
-## Title screen
+## Title screen & UI sprites (`gfx/sprites.t3s`)
 
-- Title screen art, top screen 400x240. Bard's toolkit and tavern feel, generic fantasy only. Needed.
-
-## Dice tray
-
-- Dark green felt texture for the roller background, 400x240 or tileable. The gold die is drawn live in code, not an image. Needed.
-
-## Tab and section icons
-
-Small PNG sprites for the five sections: monster manual, fight tracker, dice roller, rules reference, generators. Needed. Exact size TBD by the architecture (32x32 or 48x48).
-
-## Monster art
-
-- Out of scope for v1. The manual is text stat blocks. No monster images.
-
-## Sounds
-
-- Not in the PRD for v1. Optional: dice roll sound, UI tap sound. TBD, decide with the architecture.
-
-## Data (content, not art)
-
-- SRD 5.1 data files (monsters, spells, races, classes, weapons, armor, gear, conditions). Source and format TBD by the architecture. This is the app's content, not image or audio assets, but it is listed here so nothing is forgotten.
+| Asset | Spec | Purpose | Status |
+| :--- | :--- | :--- | :--- |
+| `gfx/bg/title_screen.png` | `400x240` PNG | Top-screen tavern tabletop title splash | Done |
+| `gfx/icons/icon_fight.png` | `20x20` RGBA PNG | Crossed swords tab icon (Fight Tracker) | Done |
+| `gfx/icons/icon_manual.png` | `20x20` RGBA PNG | Leather bestiary tome tab icon (Monster Manual) | Done |
+| `gfx/icons/icon_dice.png` | `20x20` RGBA PNG | Gold polyhedral d20 tab icon (Dice Tray) | Done |
+| `gfx/icons/icon_rules.png` | `20x20` RGBA PNG | Parchment scroll & quill tab icon (Rules Reference) | Done |
+| `gfx/icons/icon_tools.png` | `20x20` RGBA PNG | Brass tavern lantern tab icon (Tools & Campaigns) | Done |
 
 ## Out of scope for v1
 
-- Monster images.
+- Individual monster portrait art (the manual is fast text stat blocks).
 - Player-side art (there is no player side in the app).
 - Custom homebrew art.
-
-## Who makes what
-
-- Icon, banner, title screen, felt texture, tab icons: to be made.
-- SRD data: source TBD by the architecture.
-- Sounds: TBD.

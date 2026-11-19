@@ -1,0 +1,7 @@
+--atlas -f rgba8888 -z auto
+bg/title_screen.png
+icons/icon_fight.png
+icons/icon_manual.png
+icons/icon_dice.png
+icons/icon_rules.png
+icons/icon_tools.png

@@ -26,8 +26,12 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
   * Automatic user preference persistence (`sdmc:/3ds/DM_Toolkit/settings.json`) remembering your chosen Dice Skin, Tray Skin, and last opened campaign.
   * Optional SD card overlay in `sdmc:/3ds/DM_Toolkit/homebrew/*.json` to add custom monsters and spells (automatically superseding matching `[Non-SRD]` stubs).
 
+* **Custom Tavern Art & `tex3ds` Sprite Atlas:**
+  * Custom candlelit tavern **Title Screen** (`400x240`), **5 golden fantasy tab icons** (`Fight`, `Manual`, `Dice`, `Rules`, `Tools`) compiled into `romfs:/gfx/sprites.t3x`, plus custom `48x48` HOME Menu icon and `256x128` CIA banner.
+
 ## Controls (Nintendo 3DS)
 
+* **Title Screen:** Tap anywhere or press `A` to jump straight into the Fight Tracker.
 * **Touchscreen:** Primary one-handed navigation, live search keypad, HP adjustments, condition toggles, dice rolls, and skin cycling.
 * **D-Pad Up / Down:** Select combatant in Fight Tracker, scroll search results, or select party hero.
 * **Circle Pad / C-Stick Up / Down (or L / R in Manual & Rules):** Scroll long stat blocks, spells, and rule descriptions.
@@ -42,7 +46,7 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
   ```bash
   make test
   ```
-* **Nintendo 3DS `.3dsx` and `.cia` (requires `devkitPro` / `devkitARM`, `bannertool`, `makerom`):**
+* **Nintendo 3DS `.3dsx` and `.cia` (requires `devkitPro` / `devkitARM`, `tex3ds`, `bannertool`, `makerom`):**
   ```bash
   make
   make cia
@@ -54,6 +58,8 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 * [PRD.md](PRD.md): Full product specification and v1 scope.
 * [PERSONAS.md](PERSONAS.md): User personas (Kitchen Table DM first).
 * [ARCHITECTURE.md](ARCHITECTURE.md): Hardware toolchain, SRD binary layout, UI architecture, and playtest checklists.
+* [ASSETS.md](ASSETS.md): Visual asset manifest and `tex3ds` sprite pipeline.
+* `gfx/sprites.t3s`: Sprite atlas manifest compiled into `romfs/gfx/sprites.t3x`.
 * `tools/compile_srd.py`: Offline SRD 5.1 binary compiler (`romfs/data/srd.bin`) with automated IP sanitization.
 * `source/` & `include/`: C++17 core engine (`srd_db`, `combat_tracker`, `campaign_io`, `generators`, `dice_roller`) and `citro2d` 3DS UI (`main`, `dice_view`).
 
