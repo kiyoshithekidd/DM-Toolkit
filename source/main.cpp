@@ -724,10 +724,10 @@ int main(int argc, char** argv) {
                 if (app.combatRulesDrawerOpen) app.combatRulesDrawerOpen = false;
                 else if (app.fightPanel != FIGHT_PANEL_MAIN) app.fightPanel = FIGHT_PANEL_MAIN;
             } else if (app.combatRulesDrawerOpen && (kDown & KEY_R)) {
-                app.drawerRuleIndex = (app.drawerRuleIndex + 1) % std::max(1u, app.db.ruleCount());
+                app.drawerRuleIndex = (app.drawerRuleIndex + 1) % std::max<uint32_t>(1, app.db.ruleCount());
                 app.trackerRightScroll = 0;
             } else if (app.combatRulesDrawerOpen && (kDown & KEY_L)) {
-                int rc = static_cast<int>(std::max(1u, app.db.ruleCount()));
+                int rc = static_cast<int>(std::max<uint32_t>(1, app.db.ruleCount()));
                 app.drawerRuleIndex = (app.drawerRuleIndex + rc - 1) % rc;
                 app.trackerRightScroll = 0;
             } else if (kDown & KEY_CSTICK_DOWN || kDown & KEY_CPAD_DOWN) {
