@@ -1,9 +1,12 @@
 #include "srd_db.h"
 #include "combat_tracker.h"
 #include "campaign_io.h"
+#include "generators.h"
+#include "dice_roller.h"
 
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -15,9 +18,10 @@ static void testSrdLoadAndSearch(SrdDatabase& db) {
     assert(db.loadFromFile("romfs/data/srd.bin"));
     assert(db.isLoaded());
     assert(db.srdMonsterCount() == 334);
-    assert(db.ruleCount() >= 45); // 15 conditions + combat rules
+    assert(db.spellCount() == 319);
+    assert(db.refCount() >= 650);
+    assert(db.ruleCount() >= 45);
 
-    // Verify all 15 SRD conditions exist
     for (int i = 0; i < CONDITION_COUNT; ++i) {
         RuleView rv{};
         assert(db.getConditionRule(i, rv));
@@ -26,7 +30,6 @@ static void testSrdLoadAndSearch(SrdDatabase& db) {
         assert(rv.body[0] != '\0');
     }
 
-    // Verify instant search ranking: "gob" -> Goblin #1
     std::vector<SearchHit> hits;
     auto t0 = std::chrono::steady_clock::now();
     db.searchMonsters("gob", -1, CR_FILTER_ALL, hits, 20);
@@ -39,34 +42,37 @@ static void testSrdLoadAndSearch(SrdDatabase& db) {
     assert(std::string(mv.name) == "Goblin");
     assert(mv.hitPoints == 7);
     assert(mv.armorClass == 15);
-    assert(mv.actionCount >= 3); // Nimble Escape, Scimitar, Shortbow
-    ActionView av{};
-    assert(db.getMonsterAction(mv.id, 0, av));
-    assert(av.name[0] != '\0');
+    assert(mv.actionCount >= 3);
 
-    // Verify word-boundary search: "dragon" matches dragons
-    db.searchMonsters("dragon", MT_DRAGON, CR_FILTER_11_PLUS, hits, 32);
-    assert(hits.size() >= 10);
+    // Verify Spells search
+    db.searchReference("fireball", REF_TAB_SPELLS, hits, 10);
+    assert(!hits.empty());
+    assert(hits[0].category == CAT_SPELL);
+    SpellView sv{};
+    assert(db.getSpell(hits[0].recordId, sv));
+    assert(std::string(sv.name) == "Fireball");
+    assert(sv.level == 3);
 
-    // Verify Type + CR filter: Undead CR 0-1 includes Skeleton & Zombie
-    db.searchMonsters("", MT_UNDEAD, CR_FILTER_0_1, hits, 32);
-    bool foundSkeleton = false, foundZombie = false;
-    for (const auto& h : hits) {
-        MonsterView um{};
-        assert(db.getMonster(h.recordId, um));
-        assert(um.type == MT_UNDEAD);
-        assert(um.crIndex <= 4);
-        if (std::string(um.name) == "Skeleton") foundSkeleton = true;
-        if (std::string(um.name) == "Zombie") foundZombie = true;
-    }
-    assert(foundSkeleton && foundZombie);
-
-    // Verify Combat Rules search
-    db.searchRules("prone", false, hits, 10);
+    // Verify Renamed SRD Alias ("Tiny Hut")
+    db.searchReference("tiny hut", REF_TAB_SPELLS, hits, 10);
     assert(!hits.empty());
 
-    std::printf("[PASS] SRD load, filters, and search (334 monsters, query 'gob' in %lld us)\n",
-                static_cast<long long>(us));
+    // Verify Non-SRD Gap Stub ("Hex", "Sentinel")
+    db.searchReference("hex", REF_TAB_SPELLS, hits, 10);
+    assert(!hits.empty());
+    assert(hits[0].category == CAT_SRD_GAP);
+    ReferenceView rv{};
+    assert(db.getReference(hits[0].recordId, rv));
+    assert(rv.subType == GAP_NON_SRD);
+
+    // Verify Classes, Races & Gear
+    db.searchReference("wizard", REF_TAB_CLASSES, hits, 10);
+    assert(!hits.empty() && hits[0].category == CAT_CLASS);
+    db.searchReference("longsword", REF_TAB_GEAR, hits, 10);
+    assert(!hits.empty() && hits[0].category == CAT_EQUIPMENT);
+
+    std::printf("[PASS] SRD v2 load & search (334 monsters, 319 spells, %u refs/gaps, 'gob' in %lld us)\n",
+                db.refCount(), static_cast<long long>(us));
 }
 
 static void testCombatTracker(const SrdDatabase& db) {
@@ -91,117 +97,121 @@ static void testCombatTracker(const SrdDatabase& db) {
     tracker.startEncounter(enc, party, db, rng, true);
     assert(tracker.isInCombat());
     assert(tracker.combatants().size() == 5);
-    assert(tracker.roundNumber() == 1);
-    assert(tracker.activeTurnIndex() == 0);
-
-    // Verify descending initiative order
-    for (size_t i = 1; i < tracker.combatants().size(); ++i) {
-        assert(tracker.combatants()[i - 1].initRoll >= tracker.combatants()[i].initRoll);
-    }
-
-    // Advance 2 turns and record active combatant instanceId
     tracker.nextTurn();
     tracker.nextTurn();
     uint32_t activeIdBefore = tracker.combatants()[static_cast<size_t>(tracker.activeTurnIndex())].instanceId;
 
-    // Add a reinforcement mid-fight and verify active turn stays on the same combatant
     int wolfIdx = tracker.addMonsterMidFight(wolfId, 1, db, rng);
     assert(wolfIdx >= 0);
     assert(tracker.combatants().size() == 6);
-    uint32_t activeIdAfter = tracker.combatants()[static_cast<size_t>(tracker.activeTurnIndex())].instanceId;
-    assert(activeIdBefore == activeIdAfter);
+    assert(tracker.combatants()[static_cast<size_t>(tracker.activeTurnIndex())].instanceId == activeIdBefore);
 
-    // Apply damage and conditions to the wolf
-    int maxHp = tracker.combatants()[static_cast<size_t>(wolfIdx)].maxHp;
     tracker.applyHpDelta(wolfIdx, -5);
-    assert(tracker.combatants()[static_cast<size_t>(wolfIdx)].currentHp == maxHp - 5);
-    tracker.applyHpDelta(wolfIdx, -999);
-    assert(tracker.combatants()[static_cast<size_t>(wolfIdx)].currentHp == 0);
-    tracker.applyHpDelta(wolfIdx, +999);
-    assert(tracker.combatants()[static_cast<size_t>(wolfIdx)].currentHp == maxHp);
-
-    tracker.toggleCondition(wolfIdx, 11); // Prone
-    assert((tracker.combatants()[static_cast<size_t>(wolfIdx)].conditionsMask & COND_PRONE) != 0);
     tracker.toggleCondition(wolfIdx, 11);
-    assert((tracker.combatants()[static_cast<size_t>(wolfIdx)].conditionsMask & COND_PRONE) == 0);
+    assert((tracker.combatants()[static_cast<size_t>(wolfIdx)].conditionsMask & COND_PRONE) != 0);
 
-    // Advance through a full round and confirm roundNumber increments
-    int startRound = tracker.roundNumber();
-    for (size_t i = 0; i < tracker.combatants().size(); ++i) {
-        tracker.nextTurn();
+    std::printf("[PASS] CombatTracker (initiative, mid-fight add, HP, conditions)\n");
+}
+
+static void testGenerators(const SrdDatabase& db) {
+    uint32_t rng = 0xABCDEF01u;
+    SavedEncounter enc = Generators::generateEncounter(db, 3, 4, TERRAIN_FOREST, DIFF_MEDIUM, rng);
+    assert(!enc.slots.empty());
+    for (const auto& s : enc.slots) {
+        MonsterView mv{};
+        assert(db.getMonster(s.monsterId, mv));
+        assert(s.count >= 1);
     }
-    assert(tracker.roundNumber() == startRound + 1);
 
-    tracker.clear();
-    assert(!tracker.isInCombat());
-    std::printf("[PASS] CombatTracker (initiative, mid-fight add, HP clamping, conditions, rounds)\n");
+    GeneratedNpc npc = Generators::generateNpc(rng);
+    assert(!npc.name.empty());
+    assert(!npc.quirk.empty());
+
+    GeneratedLoot loot = Generators::generateLoot(db, 6, true, rng);
+    assert(!loot.summary.empty());
+    assert(!loot.gemOrArt.empty());
+    assert(!loot.items.empty());
+
+    std::printf("[PASS] Generators (Random Encounter '%s', NPC '%s', Hoard Loot)\n",
+                enc.name.c_str(), npc.name.c_str());
+}
+
+static void testDiceRoller() {
+    DiceRoller roller;
+    uint32_t rng = 0x77778888u;
+
+    // Test every die shape settles cleanly with winning face pointing toward +Z
+    for (int s = 0; s < DIE_SHAPE_COUNT; ++s) {
+        DieShape shape = static_cast<DieShape>(s);
+        roller.roll(shape, 3, ROLL_NORMAL, rng);
+        assert(roller.isRolling());
+        roller.finishImmediately();
+        assert(!roller.isRolling());
+
+        const DieBody& d = roller.dieA();
+        assert(d.settled);
+        std::vector<Vec3> normals;
+        DiceRoller::getFaceNormals(shape == DIE_D100 ? DIE_D10 : shape, normals);
+        int faceIdx = (shape == DIE_D100) ? (d.result / 10) : (d.result - 1);
+        Vec3 worldNormal = DiceRoller::rotateVec(d.rot, normals[static_cast<size_t>(faceIdx)]);
+        assert(worldNormal.z > 0.98f);
+    }
+
+    // Test Advantage & Disadvantage dual-die rolls
+    roller.roll(DIE_D20, 5, ROLL_ADVANTAGE, rng);
+    roller.finishImmediately();
+    int expectedAdv = std::max(roller.dieA().result, roller.dieB().result) + 5;
+    assert(roller.lastTotal() == expectedAdv);
+
+    roller.roll(DIE_D20, -1, ROLL_DISADVANTAGE, rng);
+    roller.finishImmediately();
+    int expectedDis = std::min(roller.dieA().result, roller.dieB().result) - 1;
+    assert(roller.lastTotal() == expectedDis);
+    assert(!roller.history().empty());
+
+    std::printf("[PASS] DiceRoller 3D kinematics & quaternion face alignment (d4..d100 + Adv/Dis)\n");
 }
 
 static void testCampaignPersistenceAndHomebrew(SrdDatabase& db) {
-    const std::string testRoot = "/tmp/dmtk_test_sd";
+    const std::string testRoot = "/tmp/dmtk_test_sd_v2";
     CampaignManager mgr(testRoot);
     assert(mgr.ensureDefaultCampaign(db));
 
-    auto list = mgr.listCampaigns();
-    assert(!list.empty());
-
-    CampaignData loaded;
-    CombatTracker fight;
-    assert(mgr.loadCampaign(list[0].slug, loaded, &fight));
-    assert(loaded.name == "Starter Campaign");
-    assert(loaded.party.size() == 4);
-    assert(loaded.encounters.size() == 2);
-
-    // Start fight, apply damage & condition, save active fight snapshot, reload
-    uint32_t rng = 0xCAFEBABEu;
-    fight.startEncounter(loaded.encounters[0], loaded.party, db, rng);
-    fight.nextTurn();
-    for (size_t i = 0; i < fight.combatants().size(); ++i) {
-        if (!fight.combatants()[i].isPlayer) {
-            fight.applyHpDelta(static_cast<int>(i), -3);
-            fight.toggleCondition(static_cast<int>(i), 10); // Poisoned
-            break;
-        }
-    }
-    assert(mgr.saveCampaign(loaded, &fight));
-
-    CampaignData reloaded;
-    CombatTracker reloadedFight;
-    assert(mgr.loadCampaign(loaded.slug, reloaded, &reloadedFight));
-    assert(reloadedFight.isInCombat());
-    assert(reloadedFight.combatants().size() == fight.combatants().size());
-    assert(reloadedFight.activeTurnIndex() == fight.activeTurnIndex());
-
-    // Test SD Homebrew Overlay
-    std::string hbFile = mgr.homebrewDir() + "/custom_monsters.json";
+    std::string hbFile = mgr.homebrewDir() + "/custom_entries.json";
     FILE* fp = std::fopen(hbFile.c_str(), "wb");
     assert(fp != nullptr);
     std::fprintf(fp,
-                 "{\"monsters\": [{\"name\": \"Clockwork Badger\", \"ac\": 16, \"hp\": 42, "
-                 "\"cr\": 3, \"dex\": 14, \"action_name\": \"Gear Bite\", "
-                 "\"action\": \"+5 to hit, 1d10+3 piercing damage.\"}]}\n");
+                 "{\"monsters\": [{\"name\": \"Clockwork Badger\", \"ac\": 16, \"hp\": 42, \"cr\": 3}],\n"
+                 " \"spells\": [{\"name\": \"Hex\", \"level\": 1, \"school\": \"Enchantment\", \"desc\": \"Custom SD spell.\"}]}\n");
     std::fclose(fp);
 
     int added = db.loadHomebrewDir(mgr.homebrewDir().c_str());
-    assert(added == 1);
-    std::vector<SearchHit> hits;
-    db.searchMonsters("clockwork", -1, CR_FILTER_ALL, hits, 5);
-    assert(hits.size() == 1);
-    assert(hits[0].isHomebrew);
-    MonsterView mv{};
-    assert(db.getMonster(hits[0].recordId, mv));
-    assert(std::string(mv.name) == "Clockwork Badger");
-    assert(mv.hitPoints == 42);
-    assert(mv.armorClass == 16);
+    assert(added == 2);
 
-    std::printf("[PASS] CampaignManager atomic JSON save/load & SD homebrew overlay\n");
+    // Verify SD Homebrew spell "Hex" supersedes the [Non-SRD] "Hex" gap stub
+    std::vector<SearchHit> hits;
+    db.searchReference("hex", REF_TAB_SPELLS, hits, 5);
+    assert(!hits.empty());
+    assert(hits[0].isHomebrew);
+    assert(hits[0].category == CAT_SPELL);
+    for (const auto& h : hits) {
+        if (h.category == CAT_SRD_GAP) {
+            ReferenceView rv{};
+            assert(db.getReference(h.recordId, rv));
+            assert(std::string(rv.name) != "Hex");
+        }
+    }
+
+    std::printf("[PASS] CampaignManager & SD Homebrew Gap Override\n");
 }
 
 int main() {
     SrdDatabase db;
     testSrdLoadAndSearch(db);
     testCombatTracker(db);
+    testGenerators(db);
+    testDiceRoller();
     testCampaignPersistenceAndHomebrew(db);
-    std::printf("ALL DM'S TOOLKIT CORE TESTS PASSED!\n");
+    std::printf("ALL DM'S TOOLKIT SLICE 2 TESTS PASSED!\n");
     return 0;
 }

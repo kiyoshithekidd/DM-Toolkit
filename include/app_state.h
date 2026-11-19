@@ -2,6 +2,8 @@
 
 #include "campaign_io.h"
 #include "combat_tracker.h"
+#include "dice_roller.h"
+#include "generators.h"
 #include "srd_db.h"
 #include <cstdint>
 #include <string>
@@ -10,15 +12,16 @@
 namespace dmtk {
 
 enum AppMode : uint8_t {
-    MODE_FIGHT    = 0,
-    MODE_MANUAL   = 1,
-    MODE_RULES    = 2,
-    MODE_CAMPAIGN = 3
+    MODE_FIGHT  = 0,
+    MODE_MANUAL = 1,
+    MODE_DICE   = 2,
+    MODE_RULES  = 3,
+    MODE_TOOLS  = 4
 };
 
 enum FightSubPanel : uint8_t {
-    FIGHT_PANEL_MAIN       = 0,
-    FIGHT_PANEL_CONDITIONS = 1,
+    FIGHT_PANEL_MAIN        = 0,
+    FIGHT_PANEL_CONDITIONS  = 1,
     FIGHT_PANEL_END_CONFIRM = 2
 };
 
@@ -31,35 +34,50 @@ struct AppState {
     CampaignManager              campaignMgr;
     CampaignData                 campaign;
     std::vector<CampaignSummary> campaigns;
+    DiceRoller                   dice;
     uint32_t                     rngState = 0x5EEDBEEFu;
+
+    // Dice & Tray skin customization (0 = Royal Gold / Emerald Felt defaults)
+    int               diceSkinIdx = 0;
+    int               traySkinIdx = 0;
+    DieShape          diceShape   = DIE_D20;
+    int               diceMod     = 0;
+    RollAdvantageMode diceAdvMode = ROLL_NORMAL;
 
     // Monster Manual search & filters
     std::string            monsterQuery;
-    int                    monsterTypeFilter = -1; // -1 = All
+    int                    monsterTypeFilter = -1;
     CrFilter               monsterCrFilter   = CR_FILTER_ALL;
     std::vector<SearchHit> monsterResults;
     int                    monsterListCursor = 0;
     int                    monsterListScroll = 0;
     int                    manualTopScroll   = 0;
 
-    // Rules Reference search & filters
+    // Pocket SRD Reference search & filters
     std::string            ruleQuery;
-    bool                   rulesConditionsOnly = false;
+    RefTabFilter           refTab = REF_TAB_ALL;
     std::vector<SearchHit> ruleResults;
     int                    ruleListCursor = 0;
     int                    ruleListScroll = 0;
     int                    ruleTopScroll  = 0;
 
     // Fight Tracker top-screen state
-    int  trackerRightScroll     = 0;
-    bool combatRulesDrawerOpen  = false;
-    int  drawerRuleIndex        = 0; // Index into db rules (0..ruleCount-1)
+    int  trackerRightScroll    = 0;
+    bool combatRulesDrawerOpen = false;
+    int  drawerRuleIndex       = 0;
 
-    // Campaign screen state
-    int  campaignSubTab         = 0; // 0 = Party & Encounters, 1 = Switch Campaign, 2 = Legal
-    int  partySelectedIdx       = 0;
+    // Tools & Campaign state (0 = Enc Gen, 1 = NPC/Loot, 2 = Party, 3 = Campaigns, 4 = Legal)
+    int                 toolsSubTab     = 0;
+    int                 partySelectedIdx = 0;
+    TerrainType         genTerrain      = TERRAIN_FOREST;
+    EncounterDifficulty genDifficulty   = DIFF_MEDIUM;
+    SavedEncounter      lastGenEncounter;
+    GeneratedNpc        lastGenNpc;
+    GeneratedLoot       lastGenLoot;
+    bool                hasGenEncounter = false;
+    bool                hasGenNpc       = false;
+    bool                hasGenLoot      = false;
 
-    // Brief status banner on bottom screen
     std::string statusBanner;
     int         statusFrames = 0;
 
@@ -76,7 +94,7 @@ struct AppState {
     }
 
     void refreshRuleSearch() {
-        db.searchRules(ruleQuery.c_str(), rulesConditionsOnly, ruleResults, 64);
+        db.searchReference(ruleQuery.c_str(), refTab, ruleResults, 128);
         ruleListCursor = 0;
         ruleListScroll = 0;
         ruleTopScroll  = 0;

@@ -5,7 +5,7 @@
 
 namespace dmtk {
 
-constexpr uint32_t SRD_BIN_VERSION = 1;
+constexpr uint32_t SRD_BIN_VERSION = 2;
 
 enum EntryCategory : uint8_t {
     CAT_MONSTER   = 0,
@@ -16,6 +16,18 @@ enum EntryCategory : uint8_t {
     CAT_RACE      = 5,
     CAT_EQUIPMENT = 6,
     CAT_SRD_GAP   = 7
+};
+
+enum EquipmentSubType : uint8_t {
+    EQ_WEAPON     = 0,
+    EQ_ARMOR      = 1,
+    EQ_GEAR       = 2,
+    EQ_MAGIC_ITEM = 3
+};
+
+enum GapSubType : uint8_t {
+    GAP_NON_SRD = 0,
+    GAP_ALIAS   = 1
 };
 
 enum MonsterType : uint8_t {
@@ -34,6 +46,18 @@ enum MonsterType : uint8_t {
     MT_PLANT       = 12,
     MT_UNDEAD      = 13,
     MT_COUNT       = 14
+};
+
+enum TerrainType : uint8_t {
+    TERRAIN_DUNGEON   = 0,
+    TERRAIN_FOREST    = 1,
+    TERRAIN_CAVES     = 2,
+    TERRAIN_ROAD      = 3,
+    TERRAIN_SWAMP     = 4,
+    TERRAIN_MOUNTAIN  = 5,
+    TERRAIN_COASTAL   = 6,
+    TERRAIN_URBAN     = 7,
+    TERRAIN_COUNT     = 8
 };
 
 enum ConditionBit : uint16_t {
@@ -60,14 +84,18 @@ constexpr int CONDITION_COUNT = 15;
 
 struct SrdBinaryHeader {
     char     magic[4];         // "DMTK"
-    uint32_t version;          // SRD_BIN_VERSION
+    uint32_t version;          // SRD_BIN_VERSION (2)
     uint32_t monsterCount;
     uint32_t actionCount;
     uint32_t ruleCount;
+    uint32_t spellCount;
+    uint32_t refCount;
     uint32_t searchEntryCount;
     uint32_t monstersOffset;
     uint32_t actionsOffset;
     uint32_t rulesOffset;
+    uint32_t spellsOffset;
+    uint32_t refsOffset;
     uint32_t searchIndexOffset;
     uint32_t stringPoolOffset;
     uint32_t stringPoolSize;
@@ -119,22 +147,49 @@ struct RuleRecord {
     uint32_t bodyOffset;
 };
 
+struct SpellRecord {
+    uint16_t id;
+    uint8_t  level;            // 0 (Cantrip) .. 9
+    uint8_t  flags;            // bit 0 = ritual, bit 1 = concentration
+    uint32_t nameOffset;
+    uint32_t schoolOffset;
+    uint32_t castingTimeOffset;
+    uint32_t rangeOffset;
+    uint32_t componentsOffset;
+    uint32_t durationOffset;
+    uint32_t classesOffset;
+    uint32_t bodyOffset;
+};
+
+struct ReferenceRecord {
+    uint16_t id;
+    uint8_t  category;         // CAT_CLASS, CAT_RACE, CAT_EQUIPMENT, CAT_SRD_GAP
+    uint8_t  subType;          // EquipmentSubType or GapSubType
+    uint32_t nameOffset;
+    uint32_t subtitleOffset;
+    uint32_t bodyOffset;
+    uint16_t linkedId;         // For GAP_ALIAS: target SpellRecord id, else 0xFFFF
+    uint16_t reserved;
+};
+
 struct SearchIndexEntry {
     char     normalizedName[32]; // Lowercase ASCII, null-terminated
     uint32_t charBitmask;        // 26-bit mask of letters a..z present in name
-    uint16_t recordId;           // Index in MonsterRecord or RuleRecord
+    uint16_t recordId;           // Index in respective table
     uint8_t  category;           // EntryCategory
-    uint8_t  crOrLevel;          // crIndex for monsters, 0 for rules
-    uint8_t  subType;            // MonsterType for monsters, isCondition for rules
+    uint8_t  crOrLevel;          // crIndex for monsters, spell level for spells
+    uint8_t  subType;            // MonsterType, EquipmentSubType, GapSubType, or isCondition
     uint8_t  reserved[3];
 };
 
 #pragma pack(pop)
 
-static_assert(sizeof(SrdBinaryHeader) == 48, "SrdBinaryHeader size mismatch");
+static_assert(sizeof(SrdBinaryHeader) == 64, "SrdBinaryHeader size mismatch");
 static_assert(sizeof(MonsterActionRef) == 16, "MonsterActionRef size mismatch");
 static_assert(sizeof(MonsterRecord) == 60, "MonsterRecord size mismatch");
 static_assert(sizeof(RuleRecord) == 16, "RuleRecord size mismatch");
+static_assert(sizeof(SpellRecord) == 36, "SpellRecord size mismatch");
+static_assert(sizeof(ReferenceRecord) == 20, "ReferenceRecord size mismatch");
 static_assert(sizeof(SearchIndexEntry) == 44, "SearchIndexEntry size mismatch");
 
 inline int abilityModifier(uint8_t score) {
@@ -162,6 +217,15 @@ inline const char* monsterTypeToString(uint8_t t) {
     };
     if (t < MT_COUNT) return kTypes[t];
     return "Unknown";
+}
+
+inline const char* terrainToString(uint8_t t) {
+    static const char* kTerrains[TERRAIN_COUNT] = {
+        "Dungeon", "Forest", "Caves", "Road",
+        "Swamp", "Mountain", "Coastal", "Urban"
+    };
+    if (t < TERRAIN_COUNT) return kTerrains[t];
+    return "Dungeon";
 }
 
 inline const char* conditionIndexToName(int idx) {
