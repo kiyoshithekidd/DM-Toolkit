@@ -1,0 +1,78 @@
+name: Build 3DSX & CIA
+
+on:
+  push:
+    branches: [ main, 'slice-*' ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  host-tests:
+    name: Compile SRD & Run Host Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compile SRD & Run Host QA Tests
+        run: |
+          make test
+
+  build-3ds:
+    name: Build .3dsx & .cia
+    needs: host-tests
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install bannertool & makerom
+        run: |
+          if ! command -v bannertool >/dev/null 2>&1; then
+            curl -fsSL https://github.com/carstene1ns/3ds-bannertool/releases/download/1.2.3/bannertool-1.2.3.tar.gz -o /tmp/bt.tar.gz
+            mkdir -p /tmp/bt-src
+            tar -xzf /tmp/bt.tar.gz -C /tmp/bt-src --strip-components=1
+            g++ -std=c++17 -O2 -DVERSION=\"1.2.3\" -DSTBI_ONLY_PNG -DSTBI_NO_LINEAR -DSTBI_NO_STDIO \
+              -DSTB_VORBIS_NO_PUSHDATA_API -DSTB_VORBIS_NO_STDIO -DDR_WAV_NO_STDIO \
+              -I/tmp/bt-src/source -I/tmp/bt-src/source/pc \
+              /tmp/bt-src/source/main.cpp /tmp/bt-src/source/log.cpp /tmp/bt-src/source/types.cpp \
+              /tmp/bt-src/source/utils.cpp /tmp/bt-src/source/3ds/cbmd.cpp /tmp/bt-src/source/3ds/cwav.cpp \
+              /tmp/bt-src/source/3ds/lz11.cpp /tmp/bt-src/source/pc/stb_image.cpp \
+              /tmp/bt-src/source/pc/stb_vorbis.cpp /tmp/bt-src/source/pc/dr_wav.cpp \
+              -o /usr/local/bin/bannertool
+          fi
+          if ! command -v makerom >/dev/null 2>&1; then
+            curl -fsSL https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.18.4/makerom-v0.18.4-ubuntu_x86_64.zip -o /tmp/makerom.zip
+            unzip -o /tmp/makerom.zip -d /tmp/makerom
+            find /tmp/makerom -name makerom -type f -exec install -m 0755 {} /usr/local/bin/makerom \;
+          fi
+
+      - name: Build .3dsx & .cia
+        run: |
+          make clean
+          make -j$(nproc --all)
+          make cia
+          ls -lh DM_Toolkit.3dsx DM_Toolkit.cia
+
+      - name: Upload .3dsx & .cia Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DM_Toolkit
+          path: |
+            DM_Toolkit.3dsx
+            DM_Toolkit.cia
+
+      - name: Upload .3dsx & .cia to GitHub Release on Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            DM_Toolkit.3dsx
+            DM_Toolkit.cia

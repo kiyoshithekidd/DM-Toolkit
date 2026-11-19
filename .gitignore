@@ -1,0 +1,11 @@
+build/
+*.3dsx
+*.cia
+*.elf
+*.smdh
+*.map
+*.lst
+test_runner
+__pycache__/
+*.pyc
+.DS_Store
