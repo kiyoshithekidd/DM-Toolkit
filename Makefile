@@ -119,8 +119,8 @@ $(DEPSDIR):
 endif
 
 generate: $(BUILD)
-	@bannertool makesmdh -s "$(APP_TITLE)" -l "$(APP_DESCRIPTION)" -p "$(APP_AUTHOR)" -i "$(ICON)" -o "$(BUILD)/icon.bin"
-	@bannertool makebanner -i "gfx/banner.png" -a "gfx/banner.wav" -o "$(BUILD)/banner.bnr"
+	@bannertool makesmdh -s "$(APP_TITLE)" -l "$(APP_DESCRIPTION)" -p "$(APP_AUTHOR)" -f "visible,allow3d,recordusage,extendedbanner" -i "$(ICON)" -o "$(BUILD)/icon.bin"
+	@bannertool makebanner -ci "gfx/banner.cgfx" -a "gfx/banner.wav" -o "$(BUILD)/banner.bnr"
 
 cia: all generate
 	@$(DEVKITARM)/bin/arm-none-eabi-strip -o $(BUILD)/$(TARGET)-strip.elf $(TARGET).elf
