@@ -91,8 +91,8 @@ static void testCombatTracker(const SrdDatabase& db) {
     enc.slots = {{goblinId, 3}};
 
     std::vector<PartyMember> party = {
-        {"Bram", 2, 1, 16, true},
-        {"Lirael", 4, 1, 14, true}
+        {"Bram", "Fighter", 2, 1, 16, 24, 24, true},
+        {"Lirael", "Wizard", 4, 1, 14, 16, 16, true}
     };
 
     tracker.startEncounter(enc, party, db, rng, true);
@@ -108,10 +108,27 @@ static void testCombatTracker(const SrdDatabase& db) {
     assert(tracker.combatants()[static_cast<size_t>(tracker.activeTurnIndex())].instanceId == activeIdBefore);
 
     tracker.applyHpDelta(wolfIdx, -5);
+    assert(tracker.canUndoHp());
+    assert(tracker.undoLastHp());
+    assert(!tracker.canUndoHp());
+    tracker.applyHpDelta(wolfIdx, -5);
     tracker.toggleCondition(wolfIdx, 11);
     assert((tracker.combatants()[static_cast<size_t>(wolfIdx)].conditionsMask & COND_PRONE) != 0);
 
-    std::printf("[PASS] CombatTracker (initiative, mid-fight add, HP, conditions)\n");
+    // Verify Player HP tracking works in CombatTracker
+    int playerIdx = -1;
+    for (size_t i = 0; i < tracker.combatants().size(); ++i) {
+        if (tracker.combatants()[i].isPlayer) {
+            playerIdx = static_cast<int>(i);
+            break;
+        }
+    }
+    assert(playerIdx >= 0);
+    int startPlayerHp = tracker.combatants()[static_cast<size_t>(playerIdx)].currentHp;
+    tracker.applyHpDelta(playerIdx, -6);
+    assert(tracker.combatants()[static_cast<size_t>(playerIdx)].currentHp == startPlayerHp - 6);
+
+    std::printf("[PASS] CombatTracker (initiative, mid-fight add, Player & Monster HP, Undo HP, conditions)\n");
 }
 
 static void testGenerators(const SrdDatabase& db) {
@@ -308,7 +325,32 @@ static void testCampaignPersistenceAndHomebrew(SrdDatabase& db) {
     sfx.play(SFX_NAT20);
     sfx.shutdown();
 
-    std::printf("[PASS] CampaignManager, UserSettings (sound_enabled), On-Device Homebrew & SoundFx\n");
+    // Test SD Card Party Character Importer (party/*.json)
+    std::string partyFile = mgr.partyImportDir() + "/player_test.json";
+    FILE* pfp = std::fopen(partyFile.c_str(), "wb");
+    assert(pfp != nullptr);
+    std::fprintf(pfp,
+                 "{\"name\": \"Kaelen\", \"class\": \"Paladin\", \"level\": 4, "
+                 "\"ac\": 18, \"max_hp\": 36, \"current_hp\": 36, \"init_bonus\": 1}\n");
+    std::fclose(pfp);
+
+    CampaignData camp;
+    assert(mgr.loadCampaign("starter_campaign", camp));
+    int imported = mgr.importPartyCharacters(camp);
+    assert(imported == 1);
+    bool foundKaelen = false;
+    for (const auto& pm : camp.party) {
+        if (pm.name == "Kaelen") {
+            foundKaelen = true;
+            assert(pm.className == "Paladin");
+            assert(pm.level == 4);
+            assert(pm.ac == 18);
+            assert(pm.maxHp == 36);
+        }
+    }
+    assert(foundKaelen);
+
+    std::printf("[PASS] CampaignManager, UserSettings, SD Party Import, On-Device Homebrew & SoundFx\n");
 }
 
 int main() {
