@@ -36,6 +36,7 @@ public:
     std::string campaignPathForSlug(const std::string& slug) const;
     std::string settingsPath() const { return baseDir_ + "/settings.json"; }
     std::string homebrewDir() const { return baseDir_ + "/homebrew"; }
+    std::string partyImportDir() const { return baseDir_ + "/party"; }
 
     bool ensureDefaultCampaign(const SrdDatabase& db);
 
@@ -43,6 +44,7 @@ public:
     bool loadCampaign(const std::string& slug, CampaignData& outCampaign, CombatTracker* outFight = nullptr) const;
     bool saveCampaign(const CampaignData& campaign, const CombatTracker* activeFight = nullptr) const;
     bool createCampaign(const std::string& name, CampaignData& outCampaign) const;
+    int  importPartyCharacters(CampaignData& campaign) const;
 
     bool loadSettings(UserSettings& outSettings) const;
     bool saveSettings(const UserSettings& settings) const;

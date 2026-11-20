@@ -9,9 +9,12 @@ namespace dmtk {
 
 struct PartyMember {
     std::string name;
+    std::string className = "Adventurer";
     int8_t      initBonus = 0;
     uint8_t     level     = 1;
     uint8_t     ac        = 12;
+    int         maxHp     = 18;
+    int         currentHp = 18;
     bool        active    = true;
 };
 
@@ -61,6 +64,11 @@ public:
 
     void applyHpDelta(int index, int delta);
     void setHp(int index, int hp);
+    bool canUndoHp() const { return lastHpEditId_ != 0; }
+    bool undoLastHp();
+    int  lastHpDelta() const { return lastHpDelta_; }
+    uint32_t lastHpEditId() const { return lastHpEditId_; }
+
     void toggleCondition(int index, int conditionIdx);
     void clearConditions(int index);
     void setInitiative(int index, int newInit);
@@ -87,6 +95,9 @@ private:
     int                    activeTurnIndex_ = 0;
     int                    selectedIndex_   = 0;
     uint32_t               nextInstanceId_  = 1;
+    uint32_t               lastHpEditId_    = 0;
+    int                    lastHpPrevValue_ = 0;
+    int                    lastHpDelta_     = 0;
     std::vector<Combatant> combatants_;
 
     int countExistingMonsters(uint16_t monsterId) const;

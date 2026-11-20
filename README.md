@@ -5,17 +5,19 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 ## Features
 
 * **Fight Tracker (Home Screen):**
-  * Dual-column top screen: live Initiative Ladder (round counter, HP bars, condition badges) on the left and the selected monster's full stat block and attacks on the right.
-  * One-handed bottom touchscreen controls: big `-10 / -5 / -1 / +1 / +5` HP buttons, **Custom HP Numpad** for exact damage/healing values, **1-Tap `[Roll Atk]`** to roll the active monster's primary attack straight into the 3D Dice Tray, 15-condition toggle grid (`Blinded`, `Poisoned`, `Prone`, `Stunned`, etc.), `Init- / Init+` overrides, mid-fight `[+ Monster]` additions, 1-tap **Combat Rules** drawer, and `[Roll Loot]` on end-fight.
+  * Dual-column top screen: live Initiative Ladder (round counter, HP bars for both **Party Heroes and Monsters**, `HEALTHY / BLOODIED / DOWN` status badges, and condition badges) on the left and the selected monster's full stat block or hero's health card on the right.
+  * One-handed bottom touchscreen controls: clearly labeled **DAMAGE** (`-10 / -5 / -1`) and **HEAL** (`+1 / +5`) buttons, **1-tap `Undo`** for accidental HP taps, **Custom HP Numpad**, **1-Tap `[Roll Atk]`** straight into the Dice Tray, 15-condition toggle grid, `Init- / Init+` overrides, mid-fight `[+ Monster]` additions, 1-tap **Combat Rules** drawer, and `[Roll Loot]` on end-fight.
 * **Monster Manual & Encounter Prep Builder:**
   * All **334 SRD 5.1 monsters** with full stat blocks, traits, actions, reactions, and legendary actions.
   * Instant always-live bottom-screen QWERTY search (~20-30 us) plus **Monster Type** and **CR** filter pills, with 1-tap `[+Fgt]` (drop straight into live combat) and `[+Prep]` (add to Encounter Builder draft).
   * **In-App Encounter Builder** (`Tools -> Prep Builder`): adjust monster quantities, inspect total base XP, save named encounters directly into your campaign, or launch the draft immediately.
 * **Hybrid Multi-Dice Tray with Custom Skins:**
   * Roll `1` to `12` dice at once (`NdX + Mod`, e.g. `2d6+4`, `8d6`) with `- / +` count steppers, quick presets (`1d`, `2d`, `4d`, `6d`, `8d`), modifiers (`-10` to `+20`), dual-die **Advantage / Disadvantage**, and roll history with per-die breakdowns.
-  * **Hybrid Visuals:** Upgraded 3D tumbling polyhedral dice (true `d12` dodecahedron, perimeter-only edges, engraved face medallions) for `1-2` dice, automatically switching to crisp 2.5D stylized polyhedral tokens (with `d6` pips) for `3-12` dice pools.
-  * **5 Dice Skins:** *Royal Gold* (default), *Obsidian Gold*, *Crimson Ruby*, *Arcane Sapphire*, and *Ivory Bone*.
-  * **5 Dice Tray Skins:** *Emerald Felt* (default), *Crimson Velvet*, *Royal Navy*, *Tavern Leather*, and *Amethyst Slate*.
+  * **Sprite-Based Polyhedral Dice:** Crisp, studio-shaded `d4`, `d6`, `d8`, `d10`, `d12`, `d20`, and `d100` sprites compiled into `romfs:/gfx/sprites.t3x` (`tex3ds`) with real-time skin tinting (`C2D_ImageTint`), smooth bounce/spin physics, and classic `d6` pips.
+  * **8 Dice Skins:** *Royal Gold* (default), *Obsidian Gold*, *Crimson Ruby*, *Arcane Sapphire*, *Ivory Bone*, *Emerald Jade*, *Frost Silver*, and *Shadow Amethyst*.
+  * **8 Dice Tray Skins:** *Emerald Felt* (default), *Crimson Velvet*, *Royal Navy*, *Tavern Leather*, *Amethyst Slate*, *Obsidian Marble*, *Sunlit Oak*, and *Abyssal Teal*.
+* **Player Character Import & Party HP Tracking (`Tools -> Party`):**
+  * Drop player character JSON files into `sdmc:/3ds/DM_Toolkit/party/*.json` and tap **`[Import SD]`** to load players' names, classes, levels, AC, and Max HP directly into your campaign and Fight Tracker.
 * **Pocket SRD Rules Reference:**
   * Searchable across **319 Spells**, **12 Classes (+ 12 SRD Subclasses)**, **9 Races**, **237 Weapons/Armor/Gear**, **362 Magic Items**, **15 Conditions**, **33 Combat Rules**, and **Grappler**.
   * Transparently resolves renamed SRD spell aliases and flags `[Non-SRD]` gaps instead of hiding them.

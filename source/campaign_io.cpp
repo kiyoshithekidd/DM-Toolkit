@@ -31,6 +31,7 @@ bool CampaignManager::ensureDirectories() const {
     mkdirRecursive(baseDir_);
     mkdirRecursive(campaignsDir_);
     mkdirRecursive(homebrewDir());
+    mkdirRecursive(partyImportDir());
     return true;
 }
 
@@ -186,9 +187,12 @@ bool CampaignManager::saveCampaign(const CampaignData& campaign, const CombatTra
     std::fprintf(fp, "  \"party\": [\n");
     for (size_t i = 0; i < campaign.party.size(); ++i) {
         const auto& p = campaign.party[i];
-        std::fprintf(fp, "    {\"name\": \"%s\", \"init_bonus\": %d, \"level\": %u, \"ac\": %u, \"active\": %s}%s\n",
-                     escapeJson(p.name).c_str(), static_cast<int>(p.initBonus),
-                     static_cast<unsigned>(p.level), static_cast<unsigned>(p.ac),
+        std::fprintf(fp,
+                     "    {\"name\": \"%s\", \"class_name\": \"%s\", \"init_bonus\": %d, "
+                     "\"level\": %u, \"ac\": %u, \"max_hp\": %d, \"current_hp\": %d, \"active\": %s}%s\n",
+                     escapeJson(p.name).c_str(), escapeJson(p.className).c_str(),
+                     static_cast<int>(p.initBonus), static_cast<unsigned>(p.level),
+                     static_cast<unsigned>(p.ac), p.maxHp, p.currentHp,
                      p.active ? "true" : "false",
                      (i + 1 < campaign.party.size()) ? "," : "");
     }
@@ -272,9 +276,13 @@ bool CampaignManager::loadCampaign(const std::string& slug, CampaignData& outCam
     for (const auto& obj : splitTopLevelObjects(partyArr)) {
         PartyMember p;
         p.name      = jStr(obj, "name", "Hero");
+        p.className = jStr(obj, "class_name", "Adventurer");
         p.initBonus = static_cast<int8_t>(std::clamp(jInt(obj, "init_bonus", 0), -10, 20));
         p.level     = static_cast<uint8_t>(std::clamp(jInt(obj, "level", outCampaign.partyLevel), 1, 20));
         p.ac        = static_cast<uint8_t>(std::clamp(jInt(obj, "ac", 12), 1, 30));
+        int defHp   = 10 + static_cast<int>(p.level) * 6;
+        p.maxHp     = std::max(1, jInt(obj, "max_hp", defHp));
+        p.currentHp = std::clamp(jInt(obj, "current_hp", p.maxHp), 0, p.maxHp);
         p.active    = jBool(obj, "active", true);
         outCampaign.party.push_back(p);
     }
@@ -359,10 +367,10 @@ bool CampaignManager::createCampaign(const std::string& name, CampaignData& outC
     outCampaign.slug       = makeSlug(outCampaign.name);
     outCampaign.partyLevel = 1;
     outCampaign.party = {
-        {"Hero 1", 2, 1, 15, true},
-        {"Hero 2", 3, 1, 14, true},
-        {"Hero 3", 1, 1, 16, true},
-        {"Hero 4", 0, 1, 12, true},
+        {"Hero 1", "Fighter", 2, 1, 15, 16, 16, true},
+        {"Hero 2", "Rogue",   3, 1, 14, 14, 14, true},
+        {"Hero 3", "Cleric",  1, 1, 16, 15, 15, true},
+        {"Hero 4", "Wizard",  0, 1, 12, 12, 12, true},
     };
     return saveCampaign(outCampaign, nullptr);
 }
@@ -377,10 +385,10 @@ bool CampaignManager::ensureDefaultCampaign(const SrdDatabase& db) {
     starter.slug       = "starter_campaign";
     starter.partyLevel = 1;
     starter.party = {
-        {"Bram",   1, 1, 16, true},
-        {"Lirael", 3, 1, 14, true},
-        {"Tovin",  2, 1, 15, true},
-        {"Mira",   0, 1, 12, true},
+        {"Bram",   "Fighter", 1, 1, 16, 16, 16, true},
+        {"Lirael", "Ranger",  3, 1, 14, 14, 14, true},
+        {"Tovin",  "Cleric",  2, 1, 15, 15, 15, true},
+        {"Mira",   "Wizard",  0, 1, 12, 12, 12, true},
     };
 
     // Look up Goblin, Wolf, and Skeleton IDs from SRD so starter encounters are valid
@@ -453,6 +461,76 @@ bool CampaignManager::loadSettings(UserSettings& outSettings) const {
     outSettings.soundEnabled     = jBool(content, "sound_enabled", true);
     outSettings.lastCampaignSlug = jStr(content, "last_campaign", "");
     return true;
+}
+
+int CampaignManager::importPartyCharacters(CampaignData& campaign) const {
+    DIR* dir = opendir(partyImportDir().c_str());
+    if (!dir) return 0;
+
+    int imported = 0;
+    struct dirent* ent = nullptr;
+    while ((ent = readdir(dir)) != nullptr) {
+        std::string fname = ent->d_name;
+        if (fname.size() <= 5 || fname.substr(fname.size() - 5) != ".json") continue;
+
+        std::string fullPath = partyImportDir() + "/" + fname;
+        FILE* fp = std::fopen(fullPath.c_str(), "rb");
+        if (!fp) continue;
+        std::fseek(fp, 0, SEEK_END);
+        long sz = std::ftell(fp);
+        if (sz <= 0 || sz > 128 * 1024) {
+            std::fclose(fp);
+            continue;
+        }
+        std::fseek(fp, 0, SEEK_SET);
+        std::string content(static_cast<size_t>(sz), '\0');
+        if (std::fread(&content[0], 1, content.size(), fp) != content.size()) {
+            std::fclose(fp);
+            continue;
+        }
+        std::fclose(fp);
+
+        std::vector<std::string> charObjs;
+        std::string arr = extractBracketSlice(content, "characters", '[', ']');
+        if (arr.empty()) arr = extractBracketSlice(content, "party", '[', ']');
+        if (!arr.empty()) {
+            charObjs = splitTopLevelObjects(arr);
+        } else if (content.find('{') != std::string::npos) {
+            charObjs.push_back(content);
+        }
+
+        for (const auto& obj : charObjs) {
+            std::string name = jStr(obj, "name", "");
+            if (name.empty()) continue;
+
+            PartyMember pm;
+            pm.name = name;
+            pm.className = jStr(obj, "class", "");
+            if (pm.className.empty()) pm.className = jStr(obj, "class_name", "Adventurer");
+            pm.level     = static_cast<uint8_t>(std::clamp(jInt(obj, "level", campaign.partyLevel), 1, 20));
+            pm.ac        = static_cast<uint8_t>(std::clamp(jInt(obj, "ac", 12), 1, 30));
+            pm.initBonus = static_cast<int8_t>(std::clamp(jInt(obj, "init_bonus", 0), -10, 20));
+            int defHp    = 10 + static_cast<int>(pm.level) * 6;
+            pm.maxHp     = std::max(1, jInt(obj, "max_hp", defHp));
+            pm.currentHp = std::clamp(jInt(obj, "current_hp", pm.maxHp), 0, pm.maxHp);
+            pm.active    = jBool(obj, "active", true);
+
+            bool updated = false;
+            for (auto& existing : campaign.party) {
+                if (existing.name == pm.name) {
+                    existing = pm;
+                    updated = true;
+                    break;
+                }
+            }
+            if (!updated && campaign.party.size() < 8) {
+                campaign.party.push_back(pm);
+            }
+            ++imported;
+        }
+    }
+    closedir(dir);
+    return imported;
 }
 
 } // namespace dmtk

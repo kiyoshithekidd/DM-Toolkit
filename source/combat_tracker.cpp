@@ -20,6 +20,9 @@ void CombatTracker::clear() {
     roundNumber_     = 1;
     activeTurnIndex_ = 0;
     selectedIndex_   = 0;
+    lastHpEditId_    = 0;
+    lastHpPrevValue_ = 0;
+    lastHpDelta_     = 0;
     combatants_.clear();
 }
 
@@ -96,6 +99,8 @@ void CombatTracker::addPartyIfMissing(const std::vector<PartyMember>& party, uin
         c.monsterId   = 0xFFFF;
         c.initBonus   = p.initBonus;
         c.initRoll    = rollD20(rngState) + p.initBonus;
+        c.maxHp       = std::max(1, p.maxHp);
+        c.currentHp   = std::clamp(p.currentHp, 0, c.maxHp);
         c.armorClass  = p.ac;
         combatants_.push_back(c);
     }
@@ -206,15 +211,41 @@ int CombatTracker::addMonsterMidFight(uint16_t monsterId, int count,
 void CombatTracker::applyHpDelta(int index, int delta) {
     if (index < 0 || index >= static_cast<int>(combatants_.size())) return;
     Combatant& c = combatants_[static_cast<size_t>(index)];
-    if (c.isPlayer) return;
+    int prev = c.currentHp;
     c.currentHp = std::clamp(c.currentHp + delta, 0, c.maxHp);
+    if (c.currentHp != prev) {
+        lastHpEditId_    = c.instanceId;
+        lastHpPrevValue_ = prev;
+        lastHpDelta_     = c.currentHp - prev;
+    }
 }
 
 void CombatTracker::setHp(int index, int hp) {
     if (index < 0 || index >= static_cast<int>(combatants_.size())) return;
     Combatant& c = combatants_[static_cast<size_t>(index)];
-    if (c.isPlayer) return;
+    int prev = c.currentHp;
     c.currentHp = std::clamp(hp, 0, c.maxHp);
+    if (c.currentHp != prev) {
+        lastHpEditId_    = c.instanceId;
+        lastHpPrevValue_ = prev;
+        lastHpDelta_     = c.currentHp - prev;
+    }
+}
+
+bool CombatTracker::undoLastHp() {
+    if (lastHpEditId_ == 0) return false;
+    for (size_t i = 0; i < combatants_.size(); ++i) {
+        if (combatants_[i].instanceId == lastHpEditId_) {
+            combatants_[i].currentHp = std::clamp(lastHpPrevValue_, 0, combatants_[i].maxHp);
+            selectedIndex_ = static_cast<int>(i);
+            lastHpEditId_  = 0;
+            lastHpDelta_   = 0;
+            return true;
+        }
+    }
+    lastHpEditId_ = 0;
+    lastHpDelta_  = 0;
+    return false;
 }
 
 void CombatTracker::toggleCondition(int index, int conditionIdx) {
