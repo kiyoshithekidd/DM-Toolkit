@@ -5,6 +5,6 @@
 
 namespace dmtk {
 
-void renderTopDiceTray(C2D_TextBuf buf, C3D_RenderTarget* target, const AppState& app);
+void renderTopDiceTray(C2D_TextBuf buf, C2D_SpriteSheet sheet, const AppState& app);
 
 } // namespace dmtk
