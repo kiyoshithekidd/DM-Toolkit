@@ -123,6 +123,7 @@ AccessControlInfo:
     - ac:u
     - am:u
     - cfg:u
+    - dsp::DSP
     - fs:USER
     - gsp::Gpu
     - hid:USER
@@ -138,6 +139,7 @@ SystemControlInfo:
     ac                    : 0x0004013000002402
     am                    : 0x0004013000001502
     cfg                   : 0x0004013000001702
+    dsp                   : 0x0004013000001a02
     gsp                   : 0x0004013000001c02
     hid                   : 0x0004013000001d02
     ndm                   : 0x0004013000002b02

@@ -21,18 +21,21 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 * **Tabletop Generators:**
   * **Random Encounter Generator** tuned to active campaign party level, party size, 8 terrains, and SRD XP difficulty thresholds, with 1-tap `[Send to Fight Tracker]`.
   * **NPC Generator** (name, ancestry, occupation, roleplay quirk) and **Loot Generator** (individual pocket coins or full treasure hoards with gems and SRD magic items).
-* **Multi-Campaign Saves, Persistent Settings & SD Homebrew Overlay:**
+* **Multi-Campaign Saves, Persistent Settings & On-Device Homebrew Creator:**
   * One atomic JSON save file per campaign in `sdmc:/3ds/DM_Toolkit/campaigns/` (party roster, preplanned encounters, and auto-saved active fight).
-  * Automatic user preference persistence (`sdmc:/3ds/DM_Toolkit/settings.json`) remembering your chosen Dice Skin, Tray Skin, and last opened campaign.
-  * Optional SD card overlay in `sdmc:/3ds/DM_Toolkit/homebrew/*.json` to add custom monsters and spells (automatically superseding matching `[Non-SRD]` stubs).
-
+  * Automatic user preference persistence (`sdmc:/3ds/DM_Toolkit/settings.json`) remembering your chosen Dice Skin, Tray Skin, Sound setting, and last opened campaign.
+  * **On-Device Homebrew Creator** (`Tools -> Brew`): author custom monsters (name, AC, HP, CR, primary action) and custom spells (name, level, description) directly on the 3DS via the system keyboard (`swkbd`), saved atomically to `sdmc:/3ds/DM_Toolkit/homebrew/on_device_homebrew.json` and hot-reloaded straight into the search index.
+  * Optional SD card overlay in `sdmc:/3ds/DM_Toolkit/homebrew/*.json` to import external custom monsters and spells (automatically superseding matching `[Non-SRD]` stubs).
+* **Tabletop Audio Engine (`ndsp`):**
+  * Procedural synthesized sound effects for dice clatter, Nat 20 chime, Nat 1 thud, and subtle UI taps using `libctru` `ndsp` audio.
+  * Gracefully falls back to silent mode if `sdmc:/3ds/dspfirm.cdc` is not dumped, with a persistent `[Sound: ON / OFF]` toggle in `Tools -> Saves`.
 * **Custom Tavern Art & `tex3ds` Sprite Atlas:**
   * Custom candlelit tavern **Title Screen** (`400x240`), **5 golden fantasy tab icons** (`Fight`, `Manual`, `Dice`, `Rules`, `Tools`) compiled into `romfs:/gfx/sprites.t3x`, plus custom `48x48` HOME Menu icon and `256x128` CIA banner.
 
 ## Controls (Nintendo 3DS)
 
 * **Title Screen:** Tap anywhere or press `A` to jump straight into the Fight Tracker.
-* **Touchscreen:** Primary one-handed navigation, live search keypad, HP adjustments, condition toggles, dice rolls, and skin cycling.
+* **Touchscreen:** Primary one-handed navigation, live search keypad, HP adjustments, condition toggles, dice rolls, skin cycling, and on-device homebrew authoring.
 * **D-Pad Up / Down:** Select combatant in Fight Tracker, scroll search results, or select party hero.
 * **Circle Pad / C-Stick Up / Down (or L / R in Manual & Rules):** Scroll long stat blocks, spells, and rule descriptions.
 * **A / R (Fight Tracker):** Advance to the next turn (or cycle rules when the Combat Rules drawer is open).
@@ -61,7 +64,7 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 * [ASSETS.md](ASSETS.md): Visual asset manifest and `tex3ds` sprite pipeline.
 * `gfx/sprites.t3s`: Sprite atlas manifest compiled into `romfs/gfx/sprites.t3x`.
 * `tools/compile_srd.py`: Offline SRD 5.1 binary compiler (`romfs/data/srd.bin`) with automated IP sanitization.
-* `source/` & `include/`: C++17 core engine (`srd_db`, `combat_tracker`, `campaign_io`, `generators`, `dice_roller`) and `citro2d` 3DS UI (`main`, `dice_view`).
+* `source/` & `include/`: C++17 core engine (`srd_db`, `combat_tracker`, `campaign_io`, `generators`, `dice_roller`, `sound_fx`) and `citro2d` 3DS UI (`main`, `dice_view`).
 
 ## Content and IP Attribution
 

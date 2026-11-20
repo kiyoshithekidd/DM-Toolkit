@@ -421,6 +421,7 @@ bool CampaignManager::saveSettings(const UserSettings& settings) const {
     std::fprintf(fp, "{\n");
     std::fprintf(fp, "  \"dice_skin\": %d,\n", settings.diceSkinIdx);
     std::fprintf(fp, "  \"tray_skin\": %d,\n", settings.traySkinIdx);
+    std::fprintf(fp, "  \"sound_enabled\": %s,\n", settings.soundEnabled ? "true" : "false");
     std::fprintf(fp, "  \"last_campaign\": \"%s\"\n", escapeJson(settings.lastCampaignSlug).c_str());
     std::fprintf(fp, "}\n");
     std::fclose(fp);
@@ -449,6 +450,7 @@ bool CampaignManager::loadSettings(UserSettings& outSettings) const {
 
     outSettings.diceSkinIdx      = std::clamp(jInt(content, "dice_skin", 0), 0, 16);
     outSettings.traySkinIdx      = std::clamp(jInt(content, "tray_skin", 0), 0, 16);
+    outSettings.soundEnabled     = jBool(content, "sound_enabled", true);
     outSettings.lastCampaignSlug = jStr(content, "last_campaign", "");
     return true;
 }

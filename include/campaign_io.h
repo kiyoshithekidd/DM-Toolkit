@@ -7,8 +7,9 @@
 namespace dmtk {
 
 struct UserSettings {
-    int         diceSkinIdx = 0;
-    int         traySkinIdx = 0;
+    int         diceSkinIdx  = 0;
+    int         traySkinIdx  = 0;
+    bool        soundEnabled = true;
     std::string lastCampaignSlug;
 };
 

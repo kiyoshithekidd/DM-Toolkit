@@ -3,6 +3,7 @@
 #include "campaign_io.h"
 #include "generators.h"
 #include "dice_roller.h"
+#include "sound_fx.h"
 
 #include <cassert>
 #include <chrono>
@@ -177,6 +178,10 @@ static void testCampaignPersistenceAndHomebrew(SrdDatabase& db) {
     CampaignManager mgr(testRoot);
     assert(mgr.ensureDefaultCampaign(db));
 
+    // Clean any previous on-device homebrew file so test is deterministic
+    std::string onDevicePath = mgr.homebrewDir() + "/on_device_homebrew.json";
+    std::remove(onDevicePath.c_str());
+
     std::string hbFile = mgr.homebrewDir() + "/custom_entries.json";
     FILE* fp = std::fopen(hbFile.c_str(), "wb");
     assert(fp != nullptr);
@@ -202,10 +207,64 @@ static void testCampaignPersistenceAndHomebrew(SrdDatabase& db) {
         }
     }
 
-    // Test UserSettings persistence (settings.json)
+    // Test On-Device Homebrew Monster creation & immediate searchability
+    HomebrewMonster customMon;
+    customMon.name         = "Ironfang Wyvern";
+    customMon.sizeAndAlign = "Large dragon, unaligned";
+    customMon.type         = MT_DRAGON;
+    customMon.armorClass   = 17;
+    customMon.hitPoints    = 95;
+    customMon.crIndex      = 10; // CR 6
+    HomebrewAction act;
+    act.name     = "Tail Stinger";
+    act.summary  = "+8 to hit, 2d6+4 piercing + poison";
+    act.fullDesc = "Melee Weapon Attack: +8 to hit, reach 10 ft., one creature.";
+    act.attackBonus = 8;
+    customMon.actions.push_back(act);
+    assert(db.saveHomebrewMonster(customMon, mgr.homebrewDir().c_str()));
+
+    db.searchMonsters("ironfang", -1, CR_FILTER_ALL, hits, 5);
+    assert(!hits.empty());
+    assert(hits[0].isHomebrew);
+    MonsterView mv{};
+    assert(db.getMonster(hits[0].recordId, mv));
+    assert(std::string(mv.name) == "Ironfang Wyvern");
+    assert(mv.armorClass == 17 && mv.hitPoints == 95);
+
+    // Test On-Device Homebrew Spell creation & immediate searchability
+    HomebrewSpell customSpell;
+    customSpell.name        = "Lantern Ward";
+    customSpell.level       = 2;
+    customSpell.school      = "Abjuration";
+    customSpell.castingTime = "1 action";
+    customSpell.range       = "30 feet";
+    customSpell.components  = "V, S";
+    customSpell.duration    = "10 minutes";
+    customSpell.body        = "A warm floating lantern wards allies against ambush.";
+    assert(db.saveHomebrewSpell(customSpell, mgr.homebrewDir().c_str()));
+
+    db.searchReference("lantern ward", REF_TAB_SPELLS, hits, 5);
+    assert(!hits.empty());
+    assert(hits[0].isHomebrew);
+    assert(hits[0].category == CAT_SPELL);
+    SpellView sv{};
+    assert(db.getSpell(hits[0].recordId, sv));
+    assert(std::string(sv.name) == "Lantern Ward");
+    assert(sv.level == 2);
+
+    // Test full reloadHomebrewDir round-trip from disk (custom_entries.json + on_device_homebrew.json)
+    int reloaded = db.reloadHomebrewDir(mgr.homebrewDir().c_str());
+    assert(reloaded == 4);
+    db.searchMonsters("ironfang", -1, CR_FILTER_ALL, hits, 5);
+    assert(!hits.empty() && hits[0].isHomebrew);
+    db.searchReference("lantern ward", REF_TAB_SPELLS, hits, 5);
+    assert(!hits.empty() && hits[0].isHomebrew);
+
+    // Test UserSettings persistence (settings.json including sound_enabled)
     UserSettings usOut;
     usOut.diceSkinIdx      = 3;
     usOut.traySkinIdx      = 2;
+    usOut.soundEnabled     = false;
     usOut.lastCampaignSlug = "starter_campaign";
     assert(mgr.saveSettings(usOut));
 
@@ -213,9 +272,21 @@ static void testCampaignPersistenceAndHomebrew(SrdDatabase& db) {
     assert(mgr.loadSettings(usIn));
     assert(usIn.diceSkinIdx == 3);
     assert(usIn.traySkinIdx == 2);
+    assert(usIn.soundEnabled == false);
     assert(usIn.lastCampaignSlug == "starter_campaign");
 
-    std::printf("[PASS] CampaignManager, UserSettings (settings.json) & SD Homebrew Gap Override\n");
+    // Test SoundFx host stub lifecycle
+    SoundFx sfx;
+    sfx.init();
+    sfx.setEnabled(false);
+    assert(!sfx.isEnabled());
+    sfx.play(SFX_DICE_ROLL);
+    sfx.setEnabled(true);
+    assert(sfx.isEnabled());
+    sfx.play(SFX_NAT20);
+    sfx.shutdown();
+
+    std::printf("[PASS] CampaignManager, UserSettings (sound_enabled), On-Device Homebrew & SoundFx\n");
 }
 
 int main() {
@@ -225,6 +296,6 @@ int main() {
     testGenerators(db);
     testDiceRoller();
     testCampaignPersistenceAndHomebrew(db);
-    std::printf("ALL DM'S TOOLKIT SLICE 2 TESTS PASSED!\n");
+    std::printf("ALL DM'S TOOLKIT v1.2 TESTS PASSED!\n");
     return 0;
 }

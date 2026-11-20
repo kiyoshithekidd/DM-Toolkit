@@ -511,7 +511,7 @@ static void parseArrayObjects(const std::string& content, const char* arrayKey,
     }
 }
 
-void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath) {
+void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath, bool isOnDeviceFile) {
     FILE* fp = std::fopen(filePath.c_str(), "rb");
     if (!fp) return;
     std::fseek(fp, 0, SEEK_END);
@@ -553,6 +553,7 @@ void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath) {
         hb.crIndex      = static_cast<uint8_t>(crInt <= 0 ? 0 : std::min(33, crInt + 3));
         hb.defenses     = extractJsonStr(obj, "defenses", "");
         hb.sensesLang   = extractJsonStr(obj, "senses", "");
+        hb.fromOnDevice = isOnDeviceFile;
 
         std::string actionText = extractJsonStr(obj, "action", "");
         if (!actionText.empty()) {
@@ -585,16 +586,17 @@ void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath) {
         if (name.empty()) continue;
 
         HomebrewSpell hs;
-        hs.id          = static_cast<uint16_t>(HOMEBREW_SPELL_ID_BASE + hbSpells_.size());
-        hs.name        = name;
-        hs.level       = static_cast<uint8_t>(std::clamp(extractJsonInt(obj, "level", 1), 0, 9));
-        hs.school      = extractJsonStr(obj, "school", "Evocation");
-        hs.castingTime = extractJsonStr(obj, "casting_time", "1 action");
-        hs.range       = extractJsonStr(obj, "range", "60 feet");
-        hs.components  = extractJsonStr(obj, "components", "V, S");
-        hs.duration    = extractJsonStr(obj, "duration", "Instantaneous");
-        hs.classes     = extractJsonStr(obj, "classes", "Custom");
-        hs.body        = extractJsonStr(obj, "desc", "Custom SD card spell entry.");
+        hs.id           = static_cast<uint16_t>(HOMEBREW_SPELL_ID_BASE + hbSpells_.size());
+        hs.name         = name;
+        hs.level        = static_cast<uint8_t>(std::clamp(extractJsonInt(obj, "level", 1), 0, 9));
+        hs.school       = extractJsonStr(obj, "school", "Evocation");
+        hs.castingTime  = extractJsonStr(obj, "casting_time", "1 action");
+        hs.range        = extractJsonStr(obj, "range", "60 feet");
+        hs.components   = extractJsonStr(obj, "components", "V, S");
+        hs.duration     = extractJsonStr(obj, "duration", "Instantaneous");
+        hs.classes      = extractJsonStr(obj, "classes", "Custom");
+        hs.body         = extractJsonStr(obj, "desc", "Custom SD card spell entry.");
+        hs.fromOnDevice = isOnDeviceFile;
 
         SearchIndexEntry se{};
         uint32_t mask = 0;
@@ -620,11 +622,124 @@ int SrdDatabase::loadHomebrewDir(const char* dirPath) {
         std::string fname = ent->d_name;
         if (fname.size() > 5 && fname.substr(fname.size() - 5) == ".json") {
             std::string fullPath = std::string(dirPath) + "/" + fname;
-            parseHomebrewJsonFile(fullPath);
+            bool isOnDevice = (fname == "on_device_homebrew.json");
+            parseHomebrewJsonFile(fullPath, isOnDevice);
         }
     }
     closedir(dir);
     return static_cast<int>(hbMonsters_.size() + hbSpells_.size()) - before;
+}
+
+int SrdDatabase::reloadHomebrewDir(const char* dirPath) {
+    hbMonsters_.clear();
+    hbSpells_.clear();
+    hbSearchEntries_.clear();
+    return loadHomebrewDir(dirPath);
+}
+
+static std::string escJson(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (char c : s) {
+        if (c == '"') out += "\\\"";
+        else if (c == '\\') out += "\\\\";
+        else if (c == '\n') out += "\\n";
+        else if (c == '\r') continue;
+        else out.push_back(c);
+    }
+    return out;
+}
+
+static bool writeOnDeviceHomebrewFile(const char* homebrewDir,
+                                      const std::vector<HomebrewMonster>& monsters,
+                                      const std::vector<HomebrewSpell>& spells) {
+    std::string finalPath = std::string(homebrewDir) + "/on_device_homebrew.json";
+    std::string tmpPath   = finalPath + ".tmp";
+    FILE* fp = std::fopen(tmpPath.c_str(), "wb");
+    if (!fp) return false;
+
+    std::vector<const HomebrewMonster*> onDevMonsters;
+    for (const auto& m : monsters) {
+        if (m.fromOnDevice) onDevMonsters.push_back(&m);
+    }
+    std::vector<const HomebrewSpell*> onDevSpells;
+    for (const auto& s : spells) {
+        if (s.fromOnDevice) onDevSpells.push_back(&s);
+    }
+
+    std::fprintf(fp, "{\n  \"monsters\": [\n");
+    for (size_t i = 0; i < onDevMonsters.size(); ++i) {
+        const auto& m = *onDevMonsters[i];
+        int crInt = (m.crIndex <= 3) ? 0 : static_cast<int>(m.crIndex) - 3;
+        const std::string& actName = m.actions.empty() ? std::string("Attack") : m.actions[0].name;
+        const std::string& actDesc = m.actions.empty() ? std::string("") : m.actions[0].fullDesc;
+        std::fprintf(fp,
+                     "    {\"name\": \"%s\", \"size_align\": \"%s\", \"ac\": %u, \"hp\": %u, "
+                     "\"cr\": %d, \"dex\": %u, \"action_name\": \"%s\", \"action\": \"%s\"}%s\n",
+                     escJson(m.name).c_str(), escJson(m.sizeAndAlign).c_str(),
+                     static_cast<unsigned>(m.armorClass), static_cast<unsigned>(m.hitPoints),
+                     crInt, static_cast<unsigned>(m.dexScore),
+                     escJson(actName).c_str(), escJson(actDesc).c_str(),
+                     (i + 1 < onDevMonsters.size()) ? "," : "");
+    }
+    std::fprintf(fp, "  ],\n  \"spells\": [\n");
+    for (size_t i = 0; i < onDevSpells.size(); ++i) {
+        const auto& s = *onDevSpells[i];
+        std::fprintf(fp,
+                     "    {\"name\": \"%s\", \"level\": %u, \"school\": \"%s\", "
+                     "\"casting_time\": \"%s\", \"range\": \"%s\", \"duration\": \"%s\", \"desc\": \"%s\"}%s\n",
+                     escJson(s.name).c_str(), static_cast<unsigned>(s.level),
+                     escJson(s.school).c_str(), escJson(s.castingTime).c_str(),
+                     escJson(s.range).c_str(), escJson(s.duration).c_str(),
+                     escJson(s.body).c_str(),
+                     (i + 1 < onDevSpells.size()) ? "," : "");
+    }
+    std::fprintf(fp, "  ]\n}\n");
+    std::fclose(fp);
+
+    std::remove(finalPath.c_str());
+    return std::rename(tmpPath.c_str(), finalPath.c_str()) == 0;
+}
+
+bool SrdDatabase::saveHomebrewMonster(const HomebrewMonster& mon, const char* homebrewDir) {
+    if (mon.name.empty() || hbMonsters_.size() >= 256) return false;
+    HomebrewMonster copy = mon;
+    copy.id           = static_cast<uint16_t>(HOMEBREW_MONSTER_ID_BASE + hbMonsters_.size());
+    copy.initBonus    = static_cast<int8_t>(abilityModifier(copy.dexScore));
+    copy.fromOnDevice = true;
+
+    SearchIndexEntry se{};
+    uint32_t mask = 0;
+    normalizeQuery(copy.name.c_str(), se.normalizedName, sizeof(se.normalizedName), mask);
+    se.charBitmask = mask;
+    se.recordId    = copy.id;
+    se.category    = CAT_MONSTER;
+    se.crOrLevel   = copy.crIndex;
+    se.subType     = copy.type;
+
+    hbMonsters_.push_back(copy);
+    hbSearchEntries_.push_back(se);
+    return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
+}
+
+bool SrdDatabase::saveHomebrewSpell(const HomebrewSpell& sp, const char* homebrewDir) {
+    if (sp.name.empty() || hbSpells_.size() >= 256) return false;
+    HomebrewSpell copy = sp;
+    copy.id           = static_cast<uint16_t>(HOMEBREW_SPELL_ID_BASE + hbSpells_.size());
+    copy.fromOnDevice = true;
+
+    SearchIndexEntry se{};
+    uint32_t mask = 0;
+    normalizeQuery(copy.name.c_str(), se.normalizedName, sizeof(se.normalizedName), mask);
+    se.charBitmask = mask;
+    se.recordId    = copy.id;
+    se.category    = CAT_SPELL;
+    se.crOrLevel   = copy.level;
+    se.subType     = 0;
+
+    hbSpells_.push_back(copy);
+    hbSearchEntries_.push_back(se);
+    return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
 }
 
 } // namespace dmtk

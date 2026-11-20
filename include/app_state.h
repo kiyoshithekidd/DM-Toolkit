@@ -4,6 +4,7 @@
 #include "combat_tracker.h"
 #include "dice_roller.h"
 #include "generators.h"
+#include "sound_fx.h"
 #include "srd_db.h"
 #include <algorithm>
 #include <cstdint>
@@ -38,22 +39,35 @@ struct AppState {
     CampaignData                 campaign;
     std::vector<CampaignSummary> campaigns;
     DiceRoller                   dice;
+    SoundFx                      sfx;
+    bool                         wasRollingDice = false;
     uint32_t                     rngState = 0x5EEDBEEFu;
 
-    // Dice & Tray skin customization (persisted in settings.json)
-    int               diceSkinIdx = 0;
-    int               traySkinIdx = 0;
-    DieShape          diceShape   = DIE_D20;
-    int               diceMod     = 0;
-    RollAdvantageMode diceAdvMode = ROLL_NORMAL;
+    // Dice & Tray skin customization + Audio toggle (persisted in settings.json)
+    int               diceSkinIdx  = 0;
+    int               traySkinIdx  = 0;
+    bool              soundEnabled = true;
+    DieShape          diceShape    = DIE_D20;
+    int               diceMod      = 0;
+    RollAdvantageMode diceAdvMode  = ROLL_NORMAL;
 
-    // Custom HP Numpad buffer (Issue #5)
+    // Custom HP Numpad buffer
     int customHpValue = 0;
 
-    // Encounter Builder draft (Issue #3)
+    // Encounter Builder draft
     SavedEncounter draftEncounter;
     int            draftSelectedIdx = 0;
-    bool           encBuilderView   = false; // Toggle between Random Gen and Prep Builder in Tools[0]
+    bool           encBuilderView   = false;
+
+    // On-Device Homebrew Creator draft (Issue #9)
+    bool        hbIsSpell    = false;
+    std::string hbName       = "Shadow Hound";
+    int         hbAc         = 14;
+    int         hbHp         = 28;
+    int         hbCr         = 2;
+    int         hbSpellLevel = 1;
+    std::string hbActionName = "Shadow Bite";
+    std::string hbDesc       = "+5 to hit, 1d8+3 necrotic damage.";
 
     // Monster Manual search & filters
     std::string            monsterQuery;
@@ -77,7 +91,7 @@ struct AppState {
     bool combatRulesDrawerOpen = false;
     int  drawerRuleIndex       = 0;
 
-    // Tools & Campaign state (0 = Enc Gen/Prep, 1 = NPC/Loot, 2 = Party, 3 = Saves, 4 = Legal)
+    // Tools & Campaign state (0=Enc, 1=Gen, 2=Brew, 3=Party, 4=Saves, 5=Legal)
     int                 toolsSubTab      = 0;
     int                 partySelectedIdx = 0;
     TerrainType         genTerrain       = TERRAIN_FOREST;
@@ -114,6 +128,7 @@ struct AppState {
         UserSettings s;
         s.diceSkinIdx      = diceSkinIdx;
         s.traySkinIdx      = traySkinIdx;
+        s.soundEnabled     = soundEnabled;
         s.lastCampaignSlug = campaign.slug;
         campaignMgr.saveSettings(s);
     }
