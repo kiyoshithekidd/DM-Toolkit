@@ -1756,7 +1756,7 @@ int main(int argc, char** argv) {
         } else if (app.mode == MODE_MANUAL) {
             renderTopManual(topBuf, app);
         } else if (app.mode == MODE_DICE) {
-            renderTopDiceTray(topBuf, spriteSheet, app);
+            renderTopDiceTray(topBuf, topTarget, app);
         } else if (app.mode == MODE_RULES) {
             renderTopRules(topBuf, app);
         } else {

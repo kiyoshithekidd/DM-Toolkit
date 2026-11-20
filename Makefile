@@ -69,10 +69,11 @@ export VPATH   := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
                   $(foreach dir,$(DATA),$(CURDIR)/$(dir))
 export DEPSDIR := $(CURDIR)/$(BUILD)
 
-CFILES   := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
-CPPFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
-SFILES   := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
-GFXFILES := $(foreach dir,$(GRAPHICS),$(notdir $(wildcard $(dir)/*.t3s)))
+CFILES    := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
+CPPFILES  := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
+SFILES    := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
+PICAFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.v.pica)))
+GFXFILES  := $(foreach dir,$(GRAPHICS),$(notdir $(wildcard $(dir)/*.t3s)))
 
 ifeq ($(strip $(CPPFILES)),)
 	export LD := $(CC)
@@ -83,7 +84,7 @@ endif
 export ROMFS_T3XFILES := $(patsubst %.t3s, $(GFXBUILD)/%.t3x, $(GFXFILES))
 export T3XHFILES      := $(patsubst %.t3s, $(BUILD)/%.h, $(GFXFILES))
 
-export OFILES   := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
+export OFILES   := $(PICAFILES:.v.pica=.shbin.o) $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
 export INCLUDE  := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
                    $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
                    -I$(CURDIR)/$(BUILD)
@@ -119,8 +120,8 @@ $(DEPSDIR):
 endif
 
 generate: $(BUILD)
-	@bannertool makesmdh -s "$(APP_TITLE)" -l "$(APP_DESCRIPTION)" -p "$(APP_AUTHOR)" -i "$(ICON)" -o "$(BUILD)/icon.bin"
-	@bannertool makebanner -i "gfx/banner.png" -a "gfx/banner.wav" -o "$(BUILD)/banner.bnr"
+	@bannertool makesmdh -s "$(APP_TITLE)" -l "$(APP_DESCRIPTION)" -p "$(APP_AUTHOR)" -f "visible,allow3d,recordusage,extendedbanner" -i "$(ICON)" -o "$(BUILD)/icon.bin"
+	@bannertool makebanner -ci "gfx/banner.cgfx" -a "gfx/banner.wav" -o "$(BUILD)/banner.bnr"
 
 cia: all generate
 	@$(DEVKITARM)/bin/arm-none-eabi-strip -o $(BUILD)/$(TARGET)-strip.elf $(TARGET).elf
@@ -141,6 +142,14 @@ DEPENDS := $(OFILES:.o=.d)
 $(OUTPUT).3dsx : $(OUTPUT).elf $(_3DSXDEPS)
 
 $(OUTPUT).elf  : $(OFILES)
+
+dice_view.o : dice_vsh.shbin.o
+
+%.shbin.o : %.v.pica
+	@echo $(notdir $<)
+	@picasso -o $*.shbin $<
+	@bin2s -a 4 $*.shbin | $(AS) -o $@
+	@printf '#pragma once\n#include <3ds/types.h>\nextern const u8 %s_shbin[];\nextern const u32 %s_shbin_size;\n' $* $* > $*_shbin.h
 
 -include $(DEPENDS)
 

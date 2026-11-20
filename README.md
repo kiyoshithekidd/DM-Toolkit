@@ -13,7 +13,7 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
   * **In-App Encounter Builder** (`Tools -> Prep Builder`): adjust monster quantities, inspect total base XP, save named encounters directly into your campaign, or launch the draft immediately.
 * **Hybrid Multi-Dice Tray with Custom Skins:**
   * Roll `1` to `12` dice at once (`NdX + Mod`, e.g. `2d6+4`, `8d6`) with `- / +` count steppers, quick presets (`1d`, `2d`, `4d`, `6d`, `8d`), modifiers (`-10` to `+20`), dual-die **Advantage / Disadvantage**, and roll history with per-die breakdowns.
-  * **Sprite-Based Polyhedral Dice:** Crisp, studio-shaded `d4`, `d6`, `d8`, `d10`, `d12`, `d20`, and `d100` sprites compiled into `romfs:/gfx/sprites.t3x` (`tex3ds`) with real-time skin tinting (`C2D_ImageTint`), smooth bounce/spin physics, and classic `d6` pips.
+  * **Hardware-Lit 3D Tumbling Dice (`citro3d`):** Real `PICA200` 3D polyhedral meshes (`d4`, `d6`, `d8`, `d10`, `d12`, `d20`, `d100`) with Phong specular lighting, true 3D perspective bounce, quaternion tumbling, and classic `d6` pips.
   * **8 Dice Skins:** *Royal Gold* (default), *Obsidian Gold*, *Crimson Ruby*, *Arcane Sapphire*, *Ivory Bone*, *Emerald Jade*, *Frost Silver*, and *Shadow Amethyst*.
   * **8 Dice Tray Skins:** *Emerald Felt* (default), *Crimson Velvet*, *Royal Navy*, *Tavern Leather*, *Amethyst Slate*, *Obsidian Marble*, *Sunlit Oak*, and *Abyssal Teal*.
 * **Player Character Import & Party HP Tracking (`Tools -> Party`):**
@@ -32,8 +32,8 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 * **Tabletop Audio Engine (`ndsp`):**
   * Procedural synthesized sound effects for dice clatter, Nat 20 chime, Nat 1 thud, and subtle UI taps using `libctru` `ndsp` audio.
   * Gracefully falls back to silent mode if `sdmc:/3ds/dspfirm.cdc` is not dumped, with a persistent `[Sound: ON / OFF]` toggle in `Tools -> Saves`.
-* **Custom Tavern Art & `tex3ds` Sprite Atlas:**
-  * Custom candlelit tavern **Title Screen** (`400x240`), **5 golden fantasy tab icons** (`Fight`, `Manual`, `Dice`, `Rules`, `Tools`) compiled into `romfs:/gfx/sprites.t3x`, plus custom `48x48` HOME Menu icon and `256x128` CIA banner.
+* **Custom Tavern Art, 3D HOME Menu Banner & `tex3ds` Sprite Atlas:**
+  * Custom candlelit tavern **Title Screen** (`400x240`), **5 golden fantasy tab icons** (`Fight`, `Manual`, `Dice`, `Rules`, `Tools`), and **studio-shaded polyhedral dice sprites** compiled into `romfs:/gfx/sprites.t3x`, plus a custom `48x48` HOME Menu icon and a **rotating 3D golden d20 `.cgfx` CIA banner** (`gfx/banner.cgfx`) with stationary `DM-TOOLKIT` plaque and warm tavern chime (`gfx/banner.wav`).
 
 ## Controls (Nintendo 3DS)
 
