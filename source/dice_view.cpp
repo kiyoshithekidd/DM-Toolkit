@@ -254,7 +254,7 @@ struct Dice3DRenderer {
 
         C3D_TexEnv* env = C3D_GetTexEnv(0);
         C3D_TexEnvInit(env);
-        C3D_TexEnvSrc(env, C3D_Both, GPU_FRAGMENT_PRIMARY_COLOR, GPU_FRAGMENT_SECONDARY_COLOR, 0);
+        C3D_TexEnvSrc(env, C3D_Both, GPU_FRAGMENT_PRIMARY_COLOR, GPU_FRAGMENT_SECONDARY_COLOR);
         C3D_TexEnvFunc(env, C3D_Both, GPU_ADD);
 
         C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_COLOR);
