@@ -41,7 +41,7 @@
 
 	; Pack view-space normal into quaternion (nx, ny, nz) -> normalquat
 	add r3.w, myconst.y, r2.z
-	max r3.w, r3.w, myconst.z
+	max r3.w, myconst.z, r3.w
 	mov r3.x, -r2.y
 	mov r3.y, r2.x
 	mov r3.z, myconst.x
