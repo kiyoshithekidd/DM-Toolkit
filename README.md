@@ -11,8 +11,9 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
   * All **334 SRD 5.1 monsters** with full stat blocks, traits, actions, reactions, and legendary actions.
   * Instant always-live bottom-screen QWERTY search (~20-30 us) plus **Monster Type** and **CR** filter pills, with 1-tap `[+Fgt]` (drop straight into live combat) and `[+Prep]` (add to Encounter Builder draft).
   * **In-App Encounter Builder** (`Tools -> Prep Builder`): adjust monster quantities, inspect total base XP, save named encounters directly into your campaign, or launch the draft immediately.
-* **3D Physics-Feel Dice Roller with Custom Skins:**
-  * Live 3D tumbling polyhedral dice (`d4`, `d6`, `d8`, `d10`, `d12`, `d20`, `d100`) with felt floor bounces, tray wall rebounds, modifiers (`-10` to `+20`), dual-die **Advantage / Disadvantage**, and roll history.
+* **Hybrid Multi-Dice Tray with Custom Skins:**
+  * Roll `1` to `12` dice at once (`NdX + Mod`, e.g. `2d6+4`, `8d6`) with `- / +` count steppers, quick presets (`1d`, `2d`, `4d`, `6d`, `8d`), modifiers (`-10` to `+20`), dual-die **Advantage / Disadvantage**, and roll history with per-die breakdowns.
+  * **Hybrid Visuals:** Upgraded 3D tumbling polyhedral dice (true `d12` dodecahedron, perimeter-only edges, engraved face medallions) for `1-2` dice, automatically switching to crisp 2.5D stylized polyhedral tokens (with `d6` pips) for `3-12` dice pools.
   * **5 Dice Skins:** *Royal Gold* (default), *Obsidian Gold*, *Crimson Ruby*, *Arcane Sapphire*, and *Ivory Bone*.
   * **5 Dice Tray Skins:** *Emerald Felt* (default), *Crimson Velvet*, *Royal Navy*, *Tavern Leather*, and *Amethyst Slate*.
 * **Pocket SRD Rules Reference:**

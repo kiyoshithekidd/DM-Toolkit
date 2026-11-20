@@ -48,6 +48,7 @@ struct AppState {
     int               traySkinIdx  = 0;
     bool              soundEnabled = true;
     DieShape          diceShape    = DIE_D20;
+    int               diceCount    = 1;
     int               diceMod      = 0;
     RollAdvantageMode diceAdvMode  = ROLL_NORMAL;
 

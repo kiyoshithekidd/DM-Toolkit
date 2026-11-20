@@ -170,7 +170,29 @@ static void testDiceRoller() {
     assert(roller.lastTotal() == expectedDis);
     assert(!roller.history().empty());
 
-    std::printf("[PASS] DiceRoller 3D kinematics & quaternion face alignment (d4..d100 + Adv/Dis)\n");
+    // Test Multi-Dice Pool (8d6 + 4)
+    roller.rollPool(DIE_D6, 8, 4, ROLL_NORMAL, rng);
+    assert(roller.activeDieCount() == 8);
+    assert(roller.currentPoolCount() == 8);
+    roller.finishImmediately();
+    assert(!roller.isRolling());
+    int sum8d6 = 0;
+    for (int i = 0; i < 8; ++i) {
+        int r = roller.dieAt(i).result;
+        assert(r >= 1 && r <= 6);
+        sum8d6 += r;
+    }
+    assert(roller.lastTotal() == sum8d6 + 4);
+    assert(roller.history()[0].rolls.size() == 8);
+    assert(roller.history()[0].count == 8);
+
+    // Test Max Pool (12d4)
+    roller.rollPool(DIE_D4, 12, 0, ROLL_NORMAL, rng);
+    assert(roller.activeDieCount() == 12);
+    roller.finishImmediately();
+    assert(roller.history()[0].rolls.size() == 12);
+
+    std::printf("[PASS] DiceRoller 3D kinematics, quaternion face alignment & Multi-Dice Pools (1-12 dice)\n");
 }
 
 static void testCampaignPersistenceAndHomebrew(SrdDatabase& db) {
