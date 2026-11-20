@@ -143,6 +143,14 @@ $(OUTPUT).3dsx : $(OUTPUT).elf $(_3DSXDEPS)
 
 $(OUTPUT).elf  : $(OFILES)
 
+dice_view.o : dice_vsh.shbin.o
+
+%.shbin.o : %.v.pica
+	@echo $(notdir $<)
+	@picasso -o $*.shbin $<
+	@bin2s -a 4 $*.shbin | $(AS) -o $@
+	@printf '#pragma once\n#include <3ds/types.h>\nextern const u8 %s_shbin[];\nextern const u32 %s_shbin_size;\n' $* $* > $*_shbin.h
+
 -include $(DEPENDS)
 
 endif
