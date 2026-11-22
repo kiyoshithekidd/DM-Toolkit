@@ -445,19 +445,51 @@ void SrdDatabase::searchReference(const char* query, RefTabFilter tab,
     }
 }
 
+static size_t findTopLevelJsonValuePos(const std::string& obj, const char* key) {
+    int depth = 0;
+    bool inStr = false;
+    size_t keyLen = std::strlen(key);
+    for (size_t i = 0; i < obj.size(); ++i) {
+        char c = obj[i];
+        if (inStr) {
+            if (c == '\\' && i + 1 < obj.size()) {
+                ++i;
+            } else if (c == '"') {
+                inStr = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            if (depth == 1 && i + 1 + keyLen < obj.size() &&
+                obj.compare(i + 1, keyLen, key) == 0 && obj[i + 1 + keyLen] == '"') {
+                size_t p = i + 2 + keyLen;
+                while (p < obj.size() && (obj[p] == ' ' || obj[p] == '\t' || obj[p] == '\r' || obj[p] == '\n')) ++p;
+                if (p < obj.size() && obj[p] == ':') {
+                    ++p;
+                    while (p < obj.size() && (obj[p] == ' ' || obj[p] == '\t' || obj[p] == '\r' || obj[p] == '\n')) ++p;
+                    return p;
+                }
+            }
+            inStr = true;
+        } else if (c == '{' || c == '[') {
+            ++depth;
+        } else if (c == '}' || c == ']') {
+            --depth;
+        }
+    }
+    return std::string::npos;
+}
+
 static std::string extractJsonStr(const std::string& obj, const char* key, const char* defVal = "") {
-    std::string pat = std::string("\"") + key + "\"";
-    size_t pos = obj.find(pat);
-    if (pos == std::string::npos) return defVal;
-    pos = obj.find(':', pos + pat.size());
-    if (pos == std::string::npos) return defVal;
-    pos = obj.find('"', pos + 1);
-    if (pos == std::string::npos) return defVal;
+    size_t pos = findTopLevelJsonValuePos(obj, key);
+    if (pos == std::string::npos || pos >= obj.size() || obj[pos] != '"') return defVal;
     std::string out;
     for (size_t i = pos + 1; i < obj.size(); ++i) {
         if (obj[i] == '\\' && i + 1 < obj.size()) {
             char next = obj[++i];
             if (next == 'n') out.push_back('\n');
+            else if (next == 'r') out.push_back('\r');
+            else if (next == 't') out.push_back('\t');
             else out.push_back(next);
         } else if (obj[i] == '"') {
             break;
@@ -469,23 +501,15 @@ static std::string extractJsonStr(const std::string& obj, const char* key, const
 }
 
 static int extractJsonInt(const std::string& obj, const char* key, int defVal) {
-    std::string pat = std::string("\"") + key + "\"";
-    size_t pos = obj.find(pat);
-    if (pos == std::string::npos) return defVal;
-    pos = obj.find(':', pos + pat.size());
-    if (pos == std::string::npos) return defVal;
-    ++pos;
-    while (pos < obj.size() && (obj[pos] == ' ' || obj[pos] == '\t')) ++pos;
-    if (pos >= obj.size()) return defVal;
+    size_t pos = findTopLevelJsonValuePos(obj, key);
+    if (pos == std::string::npos || pos >= obj.size()) return defVal;
     return std::atoi(obj.c_str() + pos);
 }
 
 static void parseArrayObjects(const std::string& content, const char* arrayKey,
                               std::vector<std::string>& outObjs) {
-    size_t arrPos = content.find(std::string("\"") + arrayKey + "\"");
-    if (arrPos == std::string::npos) return;
-    arrPos = content.find('[', arrPos);
-    if (arrPos == std::string::npos) return;
+    size_t arrPos = findTopLevelJsonValuePos(content, arrayKey);
+    if (arrPos == std::string::npos || arrPos >= content.size() || content[arrPos] != '[') return;
 
     size_t pos = arrPos + 1;
     while (pos < content.size()) {
@@ -509,6 +533,33 @@ static void parseArrayObjects(const std::string& content, const char* arrayKey,
         }
         outObjs.push_back(content.substr(start, pos - start));
     }
+}
+
+static int8_t parseAttackBonusFromText(const std::string& text) {
+    for (size_t i = 0; i < text.size(); ++i) {
+        if ((text[i] == '+' || text[i] == '-') && i + 1 < text.size() &&
+            std::isdigit(static_cast<unsigned char>(text[i + 1]))) {
+            int sign = (text[i] == '-') ? -1 : 1;
+            size_t j = i + 1;
+            int val = 0;
+            while (j < text.size() && std::isdigit(static_cast<unsigned char>(text[j]))) {
+                val = val * 10 + (text[j] - '0');
+                ++j;
+            }
+            while (j < text.size() && text[j] == ' ') ++j;
+            if (j + 6 <= text.size()) {
+                std::string tail;
+                for (size_t k = 0; k < 6; ++k) {
+                    tail.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(text[j + k]))));
+                }
+                if (tail == "to hit") {
+                    int bonus = sign * val;
+                    return static_cast<int8_t>(std::clamp(bonus, -20, 30));
+                }
+            }
+        }
+    }
+    return -128;
 }
 
 void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath, bool isOnDeviceFile) {
@@ -561,6 +612,7 @@ void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath, bool isOnDe
             act.name        = extractJsonStr(obj, "action_name", "Attack");
             act.summary     = actionText.substr(0, 72);
             act.fullDesc    = actionText;
+            act.attackBonus = parseAttackBonusFromText(actionText);
             act.sectionType = 1;
             hb.actions.push_back(act);
         }
@@ -702,20 +754,41 @@ static bool writeOnDeviceHomebrewFile(const char* homebrewDir,
 }
 
 bool SrdDatabase::saveHomebrewMonster(const HomebrewMonster& mon, const char* homebrewDir) {
-    if (mon.name.empty() || hbMonsters_.size() >= 256) return false;
+    if (mon.name.empty()) return false;
     HomebrewMonster copy = mon;
-    copy.id           = static_cast<uint16_t>(HOMEBREW_MONSTER_ID_BASE + hbMonsters_.size());
     copy.initBonus    = static_cast<int8_t>(abilityModifier(copy.dexScore));
     copy.fromOnDevice = true;
+    for (auto& act : copy.actions) {
+        if (act.attackBonus == -128 && !act.fullDesc.empty()) {
+            act.attackBonus = parseAttackBonusFromText(act.fullDesc);
+        }
+    }
 
     SearchIndexEntry se{};
     uint32_t mask = 0;
     normalizeQuery(copy.name.c_str(), se.normalizedName, sizeof(se.normalizedName), mask);
     se.charBitmask = mask;
-    se.recordId    = copy.id;
     se.category    = CAT_MONSTER;
     se.crOrLevel   = copy.crIndex;
     se.subType     = copy.type;
+
+    for (size_t i = 0; i < hbSearchEntries_.size(); ++i) {
+        if (hbSearchEntries_[i].category == CAT_MONSTER &&
+            std::strcmp(hbSearchEntries_[i].normalizedName, se.normalizedName) == 0) {
+            size_t idx = static_cast<size_t>(hbSearchEntries_[i].recordId - HOMEBREW_MONSTER_ID_BASE);
+            if (idx < hbMonsters_.size() && hbMonsters_[idx].fromOnDevice) {
+                copy.id = hbMonsters_[idx].id;
+                se.recordId = copy.id;
+                hbMonsters_[idx] = copy;
+                hbSearchEntries_[i] = se;
+                return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
+            }
+        }
+    }
+
+    if (hbMonsters_.size() >= 256) return false;
+    copy.id     = static_cast<uint16_t>(HOMEBREW_MONSTER_ID_BASE + hbMonsters_.size());
+    se.recordId = copy.id;
 
     hbMonsters_.push_back(copy);
     hbSearchEntries_.push_back(se);
@@ -723,19 +796,35 @@ bool SrdDatabase::saveHomebrewMonster(const HomebrewMonster& mon, const char* ho
 }
 
 bool SrdDatabase::saveHomebrewSpell(const HomebrewSpell& sp, const char* homebrewDir) {
-    if (sp.name.empty() || hbSpells_.size() >= 256) return false;
+    if (sp.name.empty()) return false;
     HomebrewSpell copy = sp;
-    copy.id           = static_cast<uint16_t>(HOMEBREW_SPELL_ID_BASE + hbSpells_.size());
     copy.fromOnDevice = true;
 
     SearchIndexEntry se{};
     uint32_t mask = 0;
     normalizeQuery(copy.name.c_str(), se.normalizedName, sizeof(se.normalizedName), mask);
     se.charBitmask = mask;
-    se.recordId    = copy.id;
     se.category    = CAT_SPELL;
     se.crOrLevel   = copy.level;
     se.subType     = 0;
+
+    for (size_t i = 0; i < hbSearchEntries_.size(); ++i) {
+        if (hbSearchEntries_[i].category == CAT_SPELL &&
+            std::strcmp(hbSearchEntries_[i].normalizedName, se.normalizedName) == 0) {
+            size_t idx = static_cast<size_t>(hbSearchEntries_[i].recordId - HOMEBREW_SPELL_ID_BASE);
+            if (idx < hbSpells_.size() && hbSpells_[idx].fromOnDevice) {
+                copy.id = hbSpells_[idx].id;
+                se.recordId = copy.id;
+                hbSpells_[idx] = copy;
+                hbSearchEntries_[i] = se;
+                return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
+            }
+        }
+    }
+
+    if (hbSpells_.size() >= 256) return false;
+    copy.id     = static_cast<uint16_t>(HOMEBREW_SPELL_ID_BASE + hbSpells_.size());
+    se.recordId = copy.id;
 
     hbSpells_.push_back(copy);
     hbSearchEntries_.push_back(se);

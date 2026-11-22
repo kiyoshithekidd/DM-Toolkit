@@ -95,6 +95,8 @@ struct AppState {
     // Tools & Campaign state (0=Enc, 1=Gen, 2=Brew, 3=Party, 4=Saves, 5=Legal)
     int                 toolsSubTab      = 0;
     int                 partySelectedIdx = 0;
+    int                 fightEncPage     = 0;
+    int                 campaignListPage = 0;
     TerrainType         genTerrain       = TERRAIN_FOREST;
     EncounterDifficulty genDifficulty    = DIFF_MEDIUM;
     SavedEncounter      lastGenEncounter;
