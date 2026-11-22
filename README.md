@@ -6,7 +6,7 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 
 * **Fight Tracker (Home Screen):**
   * Dual-column top screen: live Initiative Ladder (round counter, HP bars for both **Party Heroes and Monsters**, `HEALTHY / BLOODIED / DOWN` status badges, and condition badges) on the left and the selected monster's full stat block or hero's health card on the right.
-  * One-handed bottom touchscreen controls: clearly labeled **DAMAGE** (`-10 / -5 / -1`) and **HEAL** (`+1 / +5`) buttons, **1-tap `Undo`** for accidental HP taps, **Custom HP Numpad**, **1-Tap `[Roll Atk]`** straight into the Dice Tray, 15-condition toggle grid, `Init- / Init+` overrides, mid-fight `[+ Monster]` additions, 1-tap **Combat Rules** drawer, and `[Roll Loot]` on end-fight.
+  * One-handed bottom touchscreen controls: clearly labeled **DAMAGE** (`-10 / -5 / -1`) and **HEAL** (`+1 / +5`) buttons, `< / >` **Target Cycling**, **1-tap `Undo`** for accidental HP taps, **Custom HP Numpad**, **1-Tap `[Roll Atk]`** straight into the Dice Tray, 15-condition toggle grid, `Init- / Init+` overrides, `[Rm]` combatant removal, mid-fight `[+ Monster]` additions, 1-tap **Combat Rules** drawer, paged **Saved Encounters**, automatic mid-combat SD auto-save, and `[Roll Loot]` on end-fight.
 * **Monster Manual & Encounter Prep Builder:**
   * All **334 SRD 5.1 monsters** with full stat blocks, traits, actions, reactions, and legendary actions.
   * Instant always-live bottom-screen QWERTY search (~20-30 us) plus **Monster Type** and **CR** filter pills, with 1-tap `[+Fgt]` (drop straight into live combat) and `[+Prep]` (add to Encounter Builder draft).

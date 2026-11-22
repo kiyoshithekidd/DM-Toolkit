@@ -350,6 +350,40 @@ static void testCampaignPersistenceAndHomebrew(SrdDatabase& db) {
     }
     assert(foundKaelen);
 
+    // Test on-device homebrew in-place update (no duplicates) & +X to hit auto-parsing
+    uint32_t monCountBefore = db.homebrewMonsterCount();
+    HomebrewMonster updatedMon = customMon;
+    updatedMon.hitPoints = 110;
+    updatedMon.actions[0].attackBonus = -128; // Should auto-parse +8 from fullDesc
+    assert(db.saveHomebrewMonster(updatedMon, mgr.homebrewDir().c_str()));
+    assert(db.homebrewMonsterCount() == monCountBefore);
+    db.searchMonsters("ironfang", -1, CR_FILTER_ALL, hits, 5);
+    assert(!hits.empty());
+    assert(db.getMonster(hits[0].recordId, mv));
+    assert(mv.hitPoints == 110);
+    ActionView av{};
+    assert(db.getMonsterAction(hits[0].recordId, 0, av));
+    assert(av.attackBonus == 8);
+
+    // Test campaign slug deduplication (creating same name does not overwrite starter_campaign)
+    CampaignData dupA, dupB;
+    assert(mgr.createCampaign("Duplicate Quest", dupA));
+    assert(mgr.createCampaign("Duplicate Quest", dupB));
+    assert(dupA.slug != dupB.slug);
+
+    // Test depth-aware JSON parsing when nested objects have same keys as top-level
+    std::string nestedPath = mgr.campaignPathForSlug("nested_test");
+    FILE* nfp = std::fopen(nestedPath.c_str(), "wb");
+    assert(nfp != nullptr);
+    std::fprintf(nfp,
+                 "{\"party\": [{\"name\": \"NestedHero\", \"level\": 9}], "
+                 "\"campaign_name\": \"Top Level Name\", \"slug\": \"nested_test\", \"party_level\": 5}\n");
+    std::fclose(nfp);
+    CampaignData nestedLoaded;
+    assert(mgr.loadCampaign("nested_test", nestedLoaded));
+    assert(nestedLoaded.name == "Top Level Name");
+    assert(nestedLoaded.partyLevel == 5);
+
     std::printf("[PASS] CampaignManager, UserSettings, SD Party Import, On-Device Homebrew & SoundFx\n");
 }
 

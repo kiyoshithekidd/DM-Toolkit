@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -70,19 +71,51 @@ std::string CampaignManager::escapeJson(const std::string& s) {
     return out;
 }
 
+static size_t findTopLevelValuePos(const std::string& obj, const char* key) {
+    int depth = 0;
+    bool inStr = false;
+    size_t keyLen = std::strlen(key);
+    for (size_t i = 0; i < obj.size(); ++i) {
+        char c = obj[i];
+        if (inStr) {
+            if (c == '\\' && i + 1 < obj.size()) {
+                ++i;
+            } else if (c == '"') {
+                inStr = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            if (depth == 1 && i + 1 + keyLen < obj.size() &&
+                obj.compare(i + 1, keyLen, key) == 0 && obj[i + 1 + keyLen] == '"') {
+                size_t p = i + 2 + keyLen;
+                while (p < obj.size() && (obj[p] == ' ' || obj[p] == '\t' || obj[p] == '\r' || obj[p] == '\n')) ++p;
+                if (p < obj.size() && obj[p] == ':') {
+                    ++p;
+                    while (p < obj.size() && (obj[p] == ' ' || obj[p] == '\t' || obj[p] == '\r' || obj[p] == '\n')) ++p;
+                    return p;
+                }
+            }
+            inStr = true;
+        } else if (c == '{' || c == '[') {
+            ++depth;
+        } else if (c == '}' || c == ']') {
+            --depth;
+        }
+    }
+    return std::string::npos;
+}
+
 static std::string jStr(const std::string& obj, const char* key, const char* defVal = "") {
-    std::string pat = std::string("\"") + key + "\"";
-    size_t pos = obj.find(pat);
-    if (pos == std::string::npos) return defVal;
-    pos = obj.find(':', pos + pat.size());
-    if (pos == std::string::npos) return defVal;
-    pos = obj.find('"', pos + 1);
-    if (pos == std::string::npos) return defVal;
+    size_t pos = findTopLevelValuePos(obj, key);
+    if (pos == std::string::npos || pos >= obj.size() || obj[pos] != '"') return defVal;
     std::string out;
     for (size_t i = pos + 1; i < obj.size(); ++i) {
         if (obj[i] == '\\' && i + 1 < obj.size()) {
             char next = obj[++i];
             if (next == 'n') out.push_back('\n');
+            else if (next == 'r') out.push_back('\r');
+            else if (next == 't') out.push_back('\t');
             else out.push_back(next);
         } else if (obj[i] == '"') {
             break;
@@ -94,36 +127,22 @@ static std::string jStr(const std::string& obj, const char* key, const char* def
 }
 
 static int jInt(const std::string& obj, const char* key, int defVal = 0) {
-    std::string pat = std::string("\"") + key + "\"";
-    size_t pos = obj.find(pat);
-    if (pos == std::string::npos) return defVal;
-    pos = obj.find(':', pos + pat.size());
-    if (pos == std::string::npos) return defVal;
-    ++pos;
-    while (pos < obj.size() && (obj[pos] == ' ' || obj[pos] == '\t')) ++pos;
-    if (pos >= obj.size()) return defVal;
+    size_t pos = findTopLevelValuePos(obj, key);
+    if (pos == std::string::npos || pos >= obj.size()) return defVal;
     return std::atoi(obj.c_str() + pos);
 }
 
 static bool jBool(const std::string& obj, const char* key, bool defVal = true) {
-    std::string pat = std::string("\"") + key + "\"";
-    size_t pos = obj.find(pat);
-    if (pos == std::string::npos) return defVal;
-    pos = obj.find(':', pos + pat.size());
-    if (pos == std::string::npos) return defVal;
-    ++pos;
-    while (pos < obj.size() && (obj[pos] == ' ' || obj[pos] == '\t')) ++pos;
+    size_t pos = findTopLevelValuePos(obj, key);
+    if (pos == std::string::npos || pos >= obj.size()) return defVal;
     if (obj.compare(pos, 4, "true") == 0) return true;
     if (obj.compare(pos, 5, "false") == 0) return false;
     return defVal;
 }
 
 static std::string extractBracketSlice(const std::string& text, const char* key, char openCh, char closeCh) {
-    std::string pat = std::string("\"") + key + "\"";
-    size_t pos = text.find(pat);
-    if (pos == std::string::npos) return "";
-    pos = text.find(openCh, pos + pat.size());
-    if (pos == std::string::npos) return "";
+    size_t pos = findTopLevelValuePos(text, key);
+    if (pos == std::string::npos || pos >= text.size() || text[pos] != openCh) return "";
     int depth = 0;
     bool inStr = false;
     size_t start = pos;
@@ -364,7 +383,18 @@ bool CampaignManager::createCampaign(const std::string& name, CampaignData& outC
     ensureDirectories();
     outCampaign = CampaignData{};
     outCampaign.name       = name.empty() ? "New Campaign" : name;
-    outCampaign.slug       = makeSlug(outCampaign.name);
+    std::string baseSlug   = makeSlug(outCampaign.name);
+    std::string uniqueSlug = baseSlug;
+    int suffix = 2;
+    while (true) {
+        FILE* check = std::fopen(campaignPathForSlug(uniqueSlug).c_str(), "rb");
+        if (!check) break;
+        std::fclose(check);
+        std::string sufStr = "_" + std::to_string(suffix++);
+        size_t maxBase = (baseSlug.size() + sufStr.size() > 28) ? (28 - sufStr.size()) : baseSlug.size();
+        uniqueSlug = baseSlug.substr(0, maxBase) + sufStr;
+    }
+    outCampaign.slug       = uniqueSlug;
     outCampaign.partyLevel = 1;
     outCampaign.party = {
         {"Hero 1", "Fighter", 2, 1, 15, 16, 16, true},

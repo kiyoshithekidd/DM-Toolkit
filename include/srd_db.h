@@ -161,6 +161,7 @@ public:
     uint32_t monsterCount() const;
     uint32_t srdMonsterCount() const { return header_.monsterCount; }
     uint32_t homebrewMonsterCount() const { return static_cast<uint32_t>(hbMonsters_.size()); }
+    uint32_t homebrewSpellCount() const { return static_cast<uint32_t>(hbSpells_.size()); }
     uint32_t ruleCount() const { return header_.ruleCount; }
     uint32_t spellCount() const { return header_.spellCount + static_cast<uint32_t>(hbSpells_.size()); }
     uint32_t refCount() const { return header_.refCount; }

@@ -123,7 +123,7 @@ void CombatTracker::startEncounter(const SavedEncounter& encounter,
             Combatant c;
             c.instanceId = nextInstanceId_++;
             if (qty > 1) {
-                char buf[48];
+                char buf[64];
                 std::snprintf(buf, sizeof(buf), "%.36s %d", mv.name, i + 1);
                 c.displayName = buf;
             } else {
@@ -173,7 +173,7 @@ int CombatTracker::addMonsterMidFight(uint16_t monsterId, int count,
 
         int num = existing + i + 1;
         if (existing > 0 || qty > 1) {
-            char buf[48];
+            char buf[64];
             std::snprintf(buf, sizeof(buf), "%.36s %d", mv.name, num);
             c.displayName = buf;
         } else {
