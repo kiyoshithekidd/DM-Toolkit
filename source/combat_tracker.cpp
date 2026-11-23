@@ -208,6 +208,10 @@ int CombatTracker::addMonsterMidFight(uint16_t monsterId, int count,
     return selectedIndex_;
 }
 
+int CombatTracker::concentrationCheckDc(int damageTaken) {
+    return std::max(10, damageTaken / 2);
+}
+
 void CombatTracker::applyHpDelta(int index, int delta) {
     if (index < 0 || index >= static_cast<int>(combatants_.size())) return;
     Combatant& c = combatants_[static_cast<size_t>(index)];
@@ -217,6 +221,13 @@ void CombatTracker::applyHpDelta(int index, int delta) {
         lastHpEditId_    = c.instanceId;
         lastHpPrevValue_ = prev;
         lastHpDelta_     = c.currentHp - prev;
+        if (c.currentHp <= 0) {
+            c.concentrating = false;
+        } else if (prev <= 0 && c.isPlayer) {
+            c.deathSuccesses = 0;
+            c.deathFailures  = 0;
+            c.stabilized     = false;
+        }
     }
 }
 
@@ -229,6 +240,13 @@ void CombatTracker::setHp(int index, int hp) {
         lastHpEditId_    = c.instanceId;
         lastHpPrevValue_ = prev;
         lastHpDelta_     = c.currentHp - prev;
+        if (c.currentHp <= 0) {
+            c.concentrating = false;
+        } else if (prev <= 0 && c.isPlayer) {
+            c.deathSuccesses = 0;
+            c.deathFailures  = 0;
+            c.stabilized     = false;
+        }
     }
 }
 
@@ -259,6 +277,34 @@ void CombatTracker::clearConditions(int index) {
     combatants_[static_cast<size_t>(index)].conditionsMask = 0;
 }
 
+void CombatTracker::toggleConcentration(int index) {
+    if (index < 0 || index >= static_cast<int>(combatants_.size())) return;
+    Combatant& c = combatants_[static_cast<size_t>(index)];
+    c.concentrating = !c.concentrating;
+}
+
+void CombatTracker::recordDeathSave(int index, bool success) {
+    if (index < 0 || index >= static_cast<int>(combatants_.size())) return;
+    Combatant& c = combatants_[static_cast<size_t>(index)];
+    if (!c.isPlayer || c.currentHp > 0) return;
+    if (success) {
+        if (c.deathSuccesses < 3) ++c.deathSuccesses;
+        if (c.deathSuccesses >= 3) c.stabilized = true;
+    } else {
+        if (c.deathFailures < 3) ++c.deathFailures;
+        c.stabilized = false;
+    }
+}
+
+void CombatTracker::stabilize(int index) {
+    if (index < 0 || index >= static_cast<int>(combatants_.size())) return;
+    Combatant& c = combatants_[static_cast<size_t>(index)];
+    if (!c.isPlayer || c.currentHp > 0) return;
+    c.deathSuccesses = 3;
+    c.deathFailures  = 0;
+    c.stabilized     = true;
+}
+
 void CombatTracker::setInitiative(int index, int newInit) {
     if (index < 0 || index >= static_cast<int>(combatants_.size())) return;
     combatants_[static_cast<size_t>(index)].initRoll = std::clamp(newInit, -5, 40);
@@ -284,10 +330,17 @@ void CombatTracker::removeCombatant(int index) {
 
 void CombatTracker::nextTurn() {
     if (combatants_.empty()) return;
-    ++activeTurnIndex_;
-    if (activeTurnIndex_ >= static_cast<int>(combatants_.size())) {
-        activeTurnIndex_ = 0;
-        ++roundNumber_;
+    const int n = static_cast<int>(combatants_.size());
+    for (int step = 0; step < n; ++step) {
+        ++activeTurnIndex_;
+        if (activeTurnIndex_ >= n) {
+            activeTurnIndex_ = 0;
+            ++roundNumber_;
+        }
+        const Combatant& cur = combatants_[static_cast<size_t>(activeTurnIndex_)];
+        if (!autoSkipDead_ || cur.isPlayer || cur.currentHp > 0) {
+            break;
+        }
     }
     selectedIndex_ = activeTurnIndex_;
 }

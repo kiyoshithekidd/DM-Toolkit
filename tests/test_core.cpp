@@ -387,6 +387,104 @@ static void testCampaignPersistenceAndHomebrew(SrdDatabase& db) {
     std::printf("[PASS] CampaignManager, UserSettings, SD Party Import, On-Device Homebrew & SoundFx\n");
 }
 
+static void testV150Features(SrdDatabase& db) {
+    // 1. Dice expression parser (#28) & impulse (#30)
+    DiceExpr e1 = DiceRoller::parseDiceExpr("Melee Weapon Attack: +5 to hit, 2d6+4 slashing damage.");
+    assert(e1.valid && e1.count == 2 && e1.sides == 6 && e1.mod == 4 && e1.shape == DIE_D6);
+    DiceExpr e2 = DiceRoller::parseDiceExpr("1d8 - 2 cold damage");
+    assert(e2.valid && e2.count == 1 && e2.sides == 8 && e2.mod == -2 && e2.shape == DIE_D8);
+    DiceExpr e3 = DiceRoller::parseDiceExpr("No dice here");
+    assert(!e3.valid);
+
+    DiceRoller dr;
+    uint32_t rng = 0x12345u;
+    dr.rollPool(DIE_D20, 1, 0, ROLL_NORMAL, rng);
+    dr.finishImmediately();
+    assert(!dr.isRolling());
+    dr.applyImpulse(1.5f, -1.0f);
+    assert(dr.isRolling());
+
+    // 2. CombatTracker QoL (#29): Concentration, Death Saves, Auto-Skip Dead
+    std::vector<PartyMember> party = {{"Aria", "Wizard", 2, 3, 14, 22, 22, true}};
+    std::vector<SearchHit> gobs;
+    db.searchMonsters("goblin", -1, CR_FILTER_ALL, gobs, 5);
+    assert(!gobs.empty());
+    SavedEncounter enc;
+    enc.name = "QoL Test";
+    enc.slots.push_back({gobs[0].recordId, 1});
+
+    CombatTracker tr;
+    tr.startEncounter(enc, party, db, rng, true);
+    assert(tr.combatants().size() == 2);
+    int heroIdx = tr.combatants()[0].isPlayer ? 0 : 1;
+    int monIdx  = 1 - heroIdx;
+
+    tr.toggleConcentration(heroIdx);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].concentrating);
+    assert(CombatTracker::concentrationCheckDc(8) == 10);
+    assert(CombatTracker::concentrationCheckDc(28) == 14);
+
+    // Drop hero to 0 HP -> concentration drops, death saves work
+    tr.applyHpDelta(heroIdx, -100);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].currentHp == 0);
+    assert(!tr.combatants()[static_cast<size_t>(heroIdx)].concentrating);
+    tr.recordDeathSave(heroIdx, true);
+    tr.recordDeathSave(heroIdx, false);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].deathSuccesses == 1);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].deathFailures == 1);
+    tr.stabilize(heroIdx);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].stabilized);
+    tr.applyHpDelta(heroIdx, 5);
+    assert(!tr.combatants()[static_cast<size_t>(heroIdx)].stabilized);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].deathSuccesses == 0);
+
+    // Dead monster auto-skip
+    tr.applyHpDelta(monIdx, -100);
+    assert(tr.combatants()[static_cast<size_t>(monIdx)].currentHp == 0);
+    tr.setAutoSkipDead(true);
+    tr.nextTurn();
+    assert(tr.activeTurnIndex() == heroIdx);
+
+    // 3. Encounter Difficulty Calculator (#31)
+    SavedEncounter bigEnc;
+    bigEnc.name = "Goblin Horde";
+    bigEnc.slots.push_back({gobs[0].recordId, 6});
+    std::vector<PartyMember> lv1Party = {
+        {"P1", "Fighter", 1, 1, 16, 12, 12, true},
+        {"P2", "Cleric",  0, 1, 16, 10, 10, true},
+        {"P3", "Rogue",   3, 1, 14, 9,  9,  true},
+        {"P4", "Wizard",  2, 1, 12, 8,  8,  true},
+    };
+    EncounterDifficultyEval ev = Generators::evaluateEncounterDifficulty(db, bigEnc, lv1Party, 1);
+    assert(ev.baseXp == 300);      // 6 * 50 XP
+    assert(ev.multiplier == 2.0f); // 3-6 monsters = 2.0x
+    assert(ev.adjustedXp == 600);
+    assert(ev.rating == DIFF_DEADLY); // Lv1 party x4 deadly = 400 XP
+
+    // 4. Pinned Favorites persistence (#32) & Homebrew delete (#33)
+    CampaignManager mgr("/tmp/dmtk_test_v150");
+    UserSettings us;
+    us.autoSkipDead = false;
+    us.pinnedEntries = {0x00010005u, 0x00020010u};
+    assert(mgr.saveSettings(us));
+    UserSettings usLoaded;
+    assert(mgr.loadSettings(usLoaded));
+    assert(usLoaded.autoSkipDead == false);
+    assert(usLoaded.pinnedEntries.size() == 2 && usLoaded.pinnedEntries[1] == 0x00020010u);
+
+    HomebrewMonster tmpMon;
+    tmpMon.name = "Temp Ooze";
+    tmpMon.armorClass = 10;
+    tmpMon.hitPoints = 20;
+    assert(db.saveHomebrewMonster(tmpMon, mgr.homebrewDir().c_str()));
+    uint32_t hbBefore = db.homebrewMonsterCount();
+    assert(hbBefore >= 1);
+    assert(db.deleteHomebrewMonster(hbBefore - 1, mgr.homebrewDir().c_str()));
+    assert(db.homebrewMonsterCount() == hbBefore - 1);
+
+    std::printf("[PASS] v1.5.0 Engine Features (#28-#33)\n");
+}
+
 int main() {
     SrdDatabase db;
     testSrdLoadAndSearch(db);
@@ -394,6 +492,7 @@ int main() {
     testGenerators(db);
     testDiceRoller();
     testCampaignPersistenceAndHomebrew(db);
-    std::printf("ALL DM'S TOOLKIT v1.2 TESTS PASSED!\n");
+    testV150Features(db);
+    std::printf("ALL DM'S TOOLKIT v1.5.0 TESTS PASSED!\n");
     return 0;
 }

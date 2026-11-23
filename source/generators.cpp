@@ -59,6 +59,64 @@ static const uint16_t kXpThresholds[20][4] = {
     {2800, 5700, 8500,12700}  // Lv 20
 };
 
+EncounterDifficultyEval Generators::evaluateEncounterDifficulty(const SrdDatabase& db,
+                                                                      const SavedEncounter& enc,
+                                                                      const std::vector<PartyMember>& party,
+                                                                      int fallbackLevel) {
+    EncounterDifficultyEval ev;
+    int partyCount = 0;
+    for (const auto& p : party) {
+        if (!p.active) continue;
+        int lv = std::clamp(static_cast<int>(p.level), 1, 20);
+        ev.easyThresh   += kXpThresholds[lv - 1][0];
+        ev.mediumThresh += kXpThresholds[lv - 1][1];
+        ev.hardThresh   += kXpThresholds[lv - 1][2];
+        ev.deadlyThresh += kXpThresholds[lv - 1][3];
+        ++partyCount;
+    }
+    if (partyCount == 0) {
+        int lv = std::clamp(fallbackLevel, 1, 20);
+        partyCount = 4;
+        ev.easyThresh   = static_cast<uint32_t>(kXpThresholds[lv - 1][0]) * 4u;
+        ev.mediumThresh = static_cast<uint32_t>(kXpThresholds[lv - 1][1]) * 4u;
+        ev.hardThresh   = static_cast<uint32_t>(kXpThresholds[lv - 1][2]) * 4u;
+        ev.deadlyThresh = static_cast<uint32_t>(kXpThresholds[lv - 1][3]) * 4u;
+    }
+
+    int totalMonsters = 0;
+    for (const auto& s : enc.slots) {
+        MonsterView mv{};
+        if (db.getMonster(s.monsterId, mv)) {
+            ev.baseXp += mv.xp * static_cast<uint32_t>(s.count);
+            totalMonsters += static_cast<int>(s.count);
+        }
+    }
+
+    static const float kMultSteps[7] = {0.5f, 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
+    int stepIdx = 1; // 1.0x
+    if (totalMonsters >= 15)      stepIdx = 6;
+    else if (totalMonsters >= 11) stepIdx = 5;
+    else if (totalMonsters >= 7)  stepIdx = 4;
+    else if (totalMonsters >= 3)  stepIdx = 3;
+    else if (totalMonsters == 2)  stepIdx = 2;
+    else                          stepIdx = 1;
+
+    if (totalMonsters > 0) {
+        if (partyCount <= 2)      stepIdx = std::min(6, stepIdx + 1);
+        else if (partyCount >= 6) stepIdx = std::max(0, stepIdx - 1);
+    }
+
+    ev.multiplier = (totalMonsters > 0) ? kMultSteps[stepIdx] : 1.0f;
+    ev.adjustedXp = static_cast<uint32_t>(static_cast<float>(ev.baseXp) * ev.multiplier + 0.5f);
+
+    if (ev.adjustedXp >= ev.deadlyThresh && ev.deadlyThresh > 0)      ev.rating = DIFF_DEADLY;
+    else if (ev.adjustedXp >= ev.hardThresh && ev.hardThresh > 0)   ev.rating = DIFF_HARD;
+    else if (ev.adjustedXp >= ev.mediumThresh && ev.mediumThresh > 0) ev.rating = DIFF_MEDIUM;
+    else                                                            ev.rating = DIFF_EASY;
+
+    return ev;
+}
+
 SavedEncounter Generators::generateEncounter(const SrdDatabase& db,
                                            int partyLevel,
                                            int partySize,

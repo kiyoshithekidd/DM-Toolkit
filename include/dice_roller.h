@@ -58,12 +58,21 @@ struct RollHistoryEntry {
     std::string       label;
 };
 
+struct DiceExpr {
+    bool     valid = false;
+    int      count = 1;
+    int      sides = 6;
+    int      mod   = 0;
+    DieShape shape = DIE_D6;
+};
+
 class DiceRoller {
 public:
     static constexpr int MAX_POOL_DICE = 12;
 
     static int sidesForShape(DieShape s);
     static const char* shapeLabel(DieShape s);
+    static DiceExpr parseDiceExpr(const char* text);
     static Vec3 rotateVec(const Quat& q, const Vec3& v);
     static Quat normalizeQuat(const Quat& q);
     static Quat slerpQuat(const Quat& a, const Quat& b, float t);
@@ -74,6 +83,7 @@ public:
 
     void roll(DieShape shape, int modifier, RollAdvantageMode advMode, uint32_t& rngState);
     void rollPool(DieShape shape, int count, int modifier, RollAdvantageMode advMode, uint32_t& rngState);
+    void applyImpulse(float vx, float vy);
     void step(float dt = 1.0f / 60.0f);
     void finishImmediately();
 

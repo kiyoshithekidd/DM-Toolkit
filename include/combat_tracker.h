@@ -39,12 +39,17 @@ struct Combatant {
     int         maxHp          = 0;
     uint16_t    armorClass     = 10;
     uint16_t    conditionsMask = 0;
+    bool        concentrating  = false;
+    uint8_t     deathSuccesses = 0;
+    uint8_t     deathFailures  = 0;
+    bool        stabilized     = false;
 };
 
 class CombatTracker {
 public:
     // Deterministic Xorshift32 RNG helper (can be seeded with svcGetSystemTick on 3DS)
     static int rollD20(uint32_t& rngState);
+    static int concentrationCheckDc(int damageTaken);
 
     void clear();
     void startEncounter(const SavedEncounter& encounter,
@@ -71,8 +76,14 @@ public:
 
     void toggleCondition(int index, int conditionIdx);
     void clearConditions(int index);
+    void toggleConcentration(int index);
+    void recordDeathSave(int index, bool success);
+    void stabilize(int index);
     void setInitiative(int index, int newInit);
     void removeCombatant(int index);
+
+    void setAutoSkipDead(bool skip) { autoSkipDead_ = skip; }
+    bool autoSkipDead() const { return autoSkipDead_; }
 
     void nextTurn();
     void prevTurn();
@@ -91,6 +102,7 @@ public:
 
 private:
     bool                   inCombat_        = false;
+    bool                   autoSkipDead_    = true;
     int                    roundNumber_     = 1;
     int                    activeTurnIndex_ = 0;
     int                    selectedIndex_   = 0;

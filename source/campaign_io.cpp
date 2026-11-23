@@ -460,7 +460,13 @@ bool CampaignManager::saveSettings(const UserSettings& settings) const {
     std::fprintf(fp, "  \"dice_skin\": %d,\n", settings.diceSkinIdx);
     std::fprintf(fp, "  \"tray_skin\": %d,\n", settings.traySkinIdx);
     std::fprintf(fp, "  \"sound_enabled\": %s,\n", settings.soundEnabled ? "true" : "false");
-    std::fprintf(fp, "  \"last_campaign\": \"%s\"\n", escapeJson(settings.lastCampaignSlug).c_str());
+    std::fprintf(fp, "  \"auto_skip_dead\": %s,\n", settings.autoSkipDead ? "true" : "false");
+    std::fprintf(fp, "  \"last_campaign\": \"%s\",\n", escapeJson(settings.lastCampaignSlug).c_str());
+    std::fprintf(fp, "  \"pinned_entries\": [");
+    for (size_t i = 0; i < settings.pinnedEntries.size(); ++i) {
+        std::fprintf(fp, "%s%u", (i > 0 ? "," : ""), static_cast<unsigned>(settings.pinnedEntries[i]));
+    }
+    std::fprintf(fp, "]\n");
     std::fprintf(fp, "}\n");
     std::fclose(fp);
 
@@ -489,7 +495,30 @@ bool CampaignManager::loadSettings(UserSettings& outSettings) const {
     outSettings.diceSkinIdx      = std::clamp(jInt(content, "dice_skin", 0), 0, 16);
     outSettings.traySkinIdx      = std::clamp(jInt(content, "tray_skin", 0), 0, 16);
     outSettings.soundEnabled     = jBool(content, "sound_enabled", true);
+    outSettings.autoSkipDead     = jBool(content, "auto_skip_dead", true);
     outSettings.lastCampaignSlug = jStr(content, "last_campaign", "");
+    outSettings.pinnedEntries.clear();
+    size_t pPos = content.find("\"pinned_entries\"");
+    if (pPos != std::string::npos) {
+        size_t lb = content.find('[', pPos);
+        size_t rb = (lb != std::string::npos) ? content.find(']', lb) : std::string::npos;
+        if (lb != std::string::npos && rb != std::string::npos) {
+            uint32_t cur = 0;
+            bool inNum = false;
+            for (size_t i = lb + 1; i < rb; ++i) {
+                char c = content[i];
+                if (c >= '0' && c <= '9') {
+                    cur = cur * 10u + static_cast<uint32_t>(c - '0');
+                    inNum = true;
+                } else if (inNum) {
+                    outSettings.pinnedEntries.push_back(cur);
+                    cur = 0;
+                    inNum = false;
+                }
+            }
+            if (inNum) outSettings.pinnedEntries.push_back(cur);
+        }
+    }
     return true;
 }
 
