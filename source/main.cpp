@@ -156,8 +156,8 @@ void drawQwertyKeypad(C2D_TextBuf buf) {
             drawButton(buf, r, lbl, theme::PARCHMENT, theme::WALNUT_LIGHT, theme::INK, 0.44f);
         }
     }
-    drawButton(buf, Rect{220.0f, 214.0f, 44.0f, 22.0f}, "SPC", theme::PARCHMENT_ALT, theme::WALNUT_LIGHT, theme::INK, 0.36f);
-    drawButton(buf, Rect{266.0f, 214.0f, 46.0f, 22.0f}, "DEL", theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.38f);
+    drawButton(buf, Rect{220.0f, 214.0f, 44.0f, 22.0f}, "SPC", theme::PARCHMENT_ALT, theme::WALNUT_LIGHT, theme::INK, 0.40f);
+    drawButton(buf, Rect{266.0f, 214.0f, 46.0f, 22.0f}, "DEL", theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.40f);
 }
 
 // ── Top Screen Renderers (400x240) ────────────────────────────────────
@@ -178,14 +178,14 @@ void renderMonsterStatBlock(C2D_TextBuf buf, const SrdDatabase& db, const Monste
                   static_cast<unsigned>(mv.hitPoints),
                   mv.hitDice[0] ? mv.hitDice : "-",
                   mv.speed);
-    drawText(buf, lineBuf, x + 6.0f, cy, 0.36f, theme::CRIMSON_DARK);
+    drawText(buf, lineBuf, x + 6.0f, cy, 0.38f, theme::CRIMSON_DARK);
     cy += 14.0f;
 
     std::snprintf(lineBuf, sizeof(lineBuf), "STR %+d  DEX %+d  CON %+d  INT %+d  WIS %+d  CHA %+d",
                   abilityModifier(mv.strScore), abilityModifier(mv.dexScore),
                   abilityModifier(mv.conScore), abilityModifier(mv.intScore),
                   abilityModifier(mv.wisScore), abilityModifier(mv.chaScore));
-    drawText(buf, lineBuf, x + 6.0f, cy, compact ? 0.32f : 0.36f, theme::INK);
+    drawText(buf, lineBuf, x + 6.0f, cy, compact ? 0.35f : 0.38f, theme::INK);
     cy += 14.0f;
 
     C2D_DrawRectSolid(x + 4.0f, cy, 0.25f, w - 8.0f, 1.0f, theme::PARCHMENT_EDGE);
@@ -204,7 +204,7 @@ void renderMonsterStatBlock(C2D_TextBuf buf, const SrdDatabase& db, const Monste
         s_cache.compact = compact;
         s_cache.lines.clear();
 
-        size_t maxChars = compact ? 34 : 62;
+        size_t maxChars = compact ? 30 : 58;
         if (mv.sizeAndAlign[0]) {
             auto v = wrapLines(mv.sizeAndAlign, maxChars);
             s_cache.lines.insert(s_cache.lines.end(), v.begin(), v.end());
@@ -236,12 +236,12 @@ void renderMonsterStatBlock(C2D_TextBuf buf, const SrdDatabase& db, const Monste
     }
 
     int startIdx = std::max(0, std::min(scrollLine, std::max(0, static_cast<int>(s_cache.lines.size()) - 1)));
-    float lineH = 12.5f;
+    float lineH = 13.0f;
     for (size_t i = static_cast<size_t>(startIdx); i < s_cache.lines.size() && cy + lineH <= y + h - 4.0f; ++i) {
         uint32_t col = (s_cache.lines[i].rfind("[Act]", 0) == 0 || s_cache.lines[i].rfind("[Legend]", 0) == 0)
                            ? theme::CRIMSON_DARK
                            : theme::INK;
-        drawText(buf, s_cache.lines[i].c_str(), x + 6.0f, cy, compact ? 0.33f : 0.36f, col);
+        drawText(buf, s_cache.lines[i].c_str(), x + 6.0f, cy, compact ? 0.37f : 0.39f, col);
         cy += lineH;
     }
 }
@@ -261,9 +261,9 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
 
     const auto& list = app.tracker.combatants();
     if (list.empty()) {
-        drawText(buf, "No active fight.", 10.0f, 40.0f, 0.42f, theme::PARCHMENT);
-        drawText(buf, "Pick a saved encounter", 10.0f, 62.0f, 0.36f, theme::PARCHMENT_ALT);
-        drawText(buf, "or add monsters below.", 10.0f, 78.0f, 0.36f, theme::PARCHMENT_ALT);
+        drawText(buf, "No active fight.", 10.0f, 40.0f, 0.44f, theme::PARCHMENT);
+        drawText(buf, "Pick a saved encounter", 10.0f, 62.0f, 0.40f, theme::PARCHMENT_ALT);
+        drawText(buf, "or add monsters below.", 10.0f, 80.0f, 0.40f, theme::PARCHMENT_ALT);
     } else {
         int visible = 7;
         int sel = app.tracker.selectedIndex();
@@ -290,8 +290,8 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
                        theme::GOLD_DARK, theme::WHITE, 0.40f);
 
             char nameStr[28];
-            std::snprintf(nameStr, sizeof(nameStr), "%s%.15s", isTurn ? ">" : "", c.displayName.c_str());
-            drawText(buf, nameStr, 32.0f, ry + 2.0f, 0.37f,
+            std::snprintf(nameStr, sizeof(nameStr), "%s%.13s", isTurn ? ">" : "", c.displayName.c_str());
+            drawText(buf, nameStr, 32.0f, ry + 2.0f, 0.39f,
                      dead ? theme::INK_MUTED : (c.isPlayer ? theme::PLAYER_TAG : theme::INK));
 
             float pct = (c.maxHp > 0) ? static_cast<float>(c.currentHp) / static_cast<float>(c.maxHp) : 0.0f;
@@ -306,14 +306,14 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
             } else {
                 std::snprintf(hpStr, sizeof(hpStr), "%d/%d", c.currentHp, c.maxHp);
             }
-            drawText(buf, hpStr, 100.0f, ry + 14.0f, 0.32f, dead ? theme::CRIMSON : theme::INK);
+            drawText(buf, hpStr, 100.0f, ry + 13.0f, 0.38f, dead ? theme::CRIMSON : theme::INK);
 
             if (c.conditionsMask != 0) {
                 int drawn = 0;
                 for (int b = 0; b < CONDITION_COUNT && drawn < 2; ++b) {
                     if (c.conditionsMask & (1u << b)) {
-                        Rect cb{144.0f - drawn * 26.0f, ry + 2.0f, 25.0f, 11.0f};
-                        drawButton(buf, cb, conditionIndexToShort(b), theme::COND_BADGE, theme::WALNUT, theme::WHITE, 0.28f);
+                        Rect cb{142.0f - drawn * 29.0f, ry + 1.0f, 28.0f, 13.0f};
+                        drawButton(buf, cb, conditionIndexToShort(b), theme::COND_BADGE, theme::WALNUT, theme::WHITE, 0.35f);
                         ++drawn;
                     }
                 }
@@ -329,13 +329,13 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
             char rhdr[48];
             std::snprintf(rhdr, sizeof(rhdr), "RULE: %.24s", rv.name);
             drawText(buf, rhdr, 184.0f, 4.0f, 0.42f, theme::GOLD_BRIGHT);
-            drawText(buf, "[L/R] Cycle Rule   [B] Close", 184.0f, 26.0f, 0.32f, theme::INK_MUTED);
-            auto lines = wrapLines(rv.body, 34);
+            drawText(buf, "[L/R] Cycle Rule   [B] Close", 184.0f, 26.0f, 0.38f, theme::INK_MUTED);
+            auto lines = wrapLines(rv.body, 30);
             int st = std::max(0, std::min(app.trackerRightScroll, std::max(0, static_cast<int>(lines.size()) - 1)));
             float cy = 42.0f;
             for (size_t i = static_cast<size_t>(st); i < lines.size() && cy < 228.0f; ++i) {
-                drawText(buf, lines[i].c_str(), 184.0f, cy, 0.34f, theme::INK);
-                cy += 13.0f;
+                drawText(buf, lines[i].c_str(), 184.0f, cy, 0.38f, theme::INK);
+                cy += 13.5f;
             }
         }
     } else if (!list.empty()) {
@@ -353,7 +353,7 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
             char pbuf[64];
             std::snprintf(pbuf, sizeof(pbuf), "Party Hero  |  AC %u  |  Init %+d",
                           static_cast<unsigned>(selC.armorClass), static_cast<int>(selC.initBonus));
-            drawText(buf, pbuf, 186.0f, 34.0f, 0.38f, theme::INK);
+            drawText(buf, pbuf, 186.0f, 34.0f, 0.39f, theme::INK);
 
             float pct = (selC.maxHp > 0) ? static_cast<float>(selC.currentHp) / static_cast<float>(selC.maxHp) : 0.0f;
             uint32_t hpCol = (pct > 0.5f) ? theme::HP_GOOD : (pct > 0.25f ? theme::HP_WARN : theme::HP_CRIT);
@@ -369,10 +369,10 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
                 C2D_DrawRectSolid(186.0f, 78.0f, 0.30f, 206.0f * pct, 14.0f, hpCol);
             }
 
-            drawText(buf, "Use DAMAGE / HEAL below to", 186.0f, 108.0f, 0.35f, theme::INK_MUTED);
-            drawText(buf, "track this player's health.", 186.0f, 124.0f, 0.35f, theme::INK_MUTED);
-            drawText(buf, "Use [Init- / Init+] if they", 186.0f, 148.0f, 0.35f, theme::INK_MUTED);
-            drawText(buf, "rolled physical dice.", 186.0f, 164.0f, 0.35f, theme::INK_MUTED);
+            drawText(buf, "Use DAMAGE / HEAL below to", 186.0f, 108.0f, 0.40f, theme::INK_MUTED);
+            drawText(buf, "track this player's health.", 186.0f, 126.0f, 0.40f, theme::INK_MUTED);
+            drawText(buf, "Use [Init- / Init+] if they", 186.0f, 150.0f, 0.40f, theme::INK_MUTED);
+            drawText(buf, "rolled physical dice.", 186.0f, 168.0f, 0.40f, theme::INK_MUTED);
         }
     } else {
         C2D_DrawRectSolid(178.0f, 0.0f, 0.15f, 222.0f, 240.0f, theme::PARCHMENT);
@@ -386,8 +386,8 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
             char pb[64];
             std::snprintf(pb, sizeof(pb), "- %.14s (HP %d, AC %u)",
                           p.name.c_str(), p.maxHp, static_cast<unsigned>(p.ac));
-            drawText(buf, pb, 186.0f, cy, 0.35f, theme::INK);
-            cy += 16.0f;
+            drawText(buf, pb, 186.0f, cy, 0.39f, theme::INK);
+            cy += 17.0f;
         }
     }
 }
@@ -420,7 +420,7 @@ void renderSpellCard(C2D_TextBuf buf, const SpellView& sv, int scrollLine, const
     float cy = 30.0f;
     if (aliasBanner && aliasBanner[0]) {
         C2D_DrawRectSolid(6.0f, cy, 0.2f, 388.0f, 16.0f, theme::AMBER_BG);
-        drawText(buf, aliasBanner, 10.0f, cy + 2.0f, 0.34f, theme::AMBER_HDR);
+        drawText(buf, aliasBanner, 10.0f, cy + 1.0f, 0.38f, theme::AMBER_HDR);
         cy += 18.0f;
     }
 
@@ -428,17 +428,17 @@ void renderSpellCard(C2D_TextBuf buf, const SpellView& sv, int scrollLine, const
     std::snprintf(meta1, sizeof(meta1), "Time: %s  |  Range: %s", sv.castingTime, sv.range);
     std::snprintf(meta2, sizeof(meta2), "Duration: %s%s  |  Classes: %s",
                   sv.duration, sv.concentration ? " (Conc)" : "", sv.classes);
-    drawText(buf, meta1, 8.0f, cy, 0.35f, theme::CRIMSON_DARK); cy += 13.0f;
-    drawText(buf, meta2, 8.0f, cy, 0.35f, theme::INK_MUTED); cy += 14.0f;
+    drawText(buf, meta1, 8.0f, cy, 0.38f, theme::CRIMSON_DARK); cy += 14.0f;
+    drawText(buf, meta2, 8.0f, cy, 0.38f, theme::INK_MUTED); cy += 15.0f;
     C2D_DrawRectSolid(6.0f, cy, 0.25f, 388.0f, 1.0f, theme::PARCHMENT_EDGE);
     cy += 4.0f;
 
     std::string full = std::string("Components: ") + sv.components + "\n\n" + sv.body;
-    auto lines = wrapLines(full, 62);
+    auto lines = wrapLines(full, 58);
     int st = std::max(0, std::min(scrollLine, std::max(0, static_cast<int>(lines.size()) - 1)));
     for (size_t i = static_cast<size_t>(st); i < lines.size() && cy < 228.0f; ++i) {
-        drawText(buf, lines[i].c_str(), 8.0f, cy, 0.36f, theme::INK);
-        cy += 13.5f;
+        drawText(buf, lines[i].c_str(), 8.0f, cy, 0.39f, theme::INK);
+        cy += 14.0f;
     }
 }
 
@@ -465,12 +465,12 @@ void renderTopRules(C2D_TextBuf buf, const AppState& app) {
             std::snprintf(hdr, sizeof(hdr), "%s  [%s]", rv.name, rv.category);
             drawText(buf, hdr, 8.0f, 5.0f, 0.46f, theme::WHITE);
 
-            auto lines = wrapLines(rv.body, 60);
+            auto lines = wrapLines(rv.body, 56);
             int st = std::max(0, std::min(app.ruleTopScroll, std::max(0, static_cast<int>(lines.size()) - 1)));
             float cy = 34.0f;
             for (size_t i = static_cast<size_t>(st); i < lines.size() && cy < 228.0f; ++i) {
-                drawText(buf, lines[i].c_str(), 10.0f, cy, 0.37f, theme::INK);
-                cy += 14.0f;
+                drawText(buf, lines[i].c_str(), 10.0f, cy, 0.40f, theme::INK);
+                cy += 14.5f;
             }
         }
     } else {
@@ -487,15 +487,15 @@ void renderTopRules(C2D_TextBuf buf, const AppState& app) {
             C2D_DrawRectSolid(0.0f, 0.0f, 0.12f, 400.0f, 240.0f, isGap ? theme::AMBER_BG : theme::PARCHMENT);
             C2D_DrawRectSolid(0.0f, 0.0f, 0.2f, 400.0f, 26.0f, isGap ? theme::AMBER_HDR : theme::WALNUT);
             drawText(buf, rv.name, 8.0f, 5.0f, 0.48f, theme::WHITE);
-            drawText(buf, rv.subtitle, 10.0f, 32.0f, 0.38f, isGap ? theme::AMBER_HDR : theme::CRIMSON_DARK);
+            drawText(buf, rv.subtitle, 10.0f, 32.0f, 0.40f, isGap ? theme::AMBER_HDR : theme::CRIMSON_DARK);
             C2D_DrawRectSolid(8.0f, 48.0f, 0.25f, 384.0f, 1.0f, theme::PARCHMENT_EDGE);
 
-            auto lines = wrapLines(rv.body, 60);
+            auto lines = wrapLines(rv.body, 56);
             int st = std::max(0, std::min(app.ruleTopScroll, std::max(0, static_cast<int>(lines.size()) - 1)));
             float cy = 54.0f;
             for (size_t i = static_cast<size_t>(st); i < lines.size() && cy < 228.0f; ++i) {
-                drawText(buf, lines[i].c_str(), 10.0f, cy, 0.37f, theme::INK);
-                cy += 14.0f;
+                drawText(buf, lines[i].c_str(), 10.0f, cy, 0.40f, theme::INK);
+                cy += 14.5f;
             }
         }
     }
@@ -508,10 +508,10 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
     if (app.toolsSubTab == 0) {
         if (app.encBuilderView) {
             drawText(buf, "ENCOUNTER PREP BUILDER", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
-            drawText(buf, "Add monsters via [+Prep] in Manual. D-Pad selects row.", 10.0f, 32.0f, 0.34f, theme::INK_MUTED);
+            drawText(buf, "Add monsters via [+Prep] in Manual. D-Pad selects.", 10.0f, 32.0f, 0.38f, theme::INK_MUTED);
             if (app.draftEncounter.slots.empty()) {
                 drawText(buf, "Draft encounter is empty.", 10.0f, 70.0f, 0.44f, theme::INK_MUTED);
-                drawText(buf, "Tap [Manual] -> [+Prep] to add monsters.", 10.0f, 94.0f, 0.38f, theme::FELT);
+                drawText(buf, "Tap [Manual] -> [+Prep] to add monsters.", 10.0f, 94.0f, 0.40f, theme::FELT);
             } else {
                 uint32_t totalXp = 0;
                 float cy = 54.0f;
@@ -526,14 +526,14 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
                                       sel ? "> " : "  ",
                                       static_cast<unsigned>(s.count), mv.name,
                                       crIndexToString(mv.crIndex), static_cast<unsigned>(mv.xp));
-                        drawText(buf, mb, 10.0f, cy, 0.39f, sel ? theme::CRIMSON : theme::INK);
+                        drawText(buf, mb, 10.0f, cy, 0.40f, sel ? theme::CRIMSON : theme::INK);
                         cy += 18.0f;
                     }
                 }
                 char xpBuf[64];
                 std::snprintf(xpBuf, sizeof(xpBuf), "Total Base XP: %u  |  Saved Encounters: %zu",
                               static_cast<unsigned>(totalXp), app.campaign.encounters.size());
-                drawText(buf, xpBuf, 10.0f, 214.0f, 0.36f, theme::FELT);
+                drawText(buf, xpBuf, 10.0f, 214.0f, 0.39f, theme::FELT);
             }
         } else {
             drawText(buf, "RANDOM ENCOUNTER GENERATOR", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
@@ -543,7 +543,7 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
                           app.campaign.party.size(),
                           terrainToString(app.genTerrain),
                           Generators::difficultyToString(app.genDifficulty));
-            drawText(buf, cfg, 10.0f, 34.0f, 0.38f, theme::CRIMSON_DARK);
+            drawText(buf, cfg, 10.0f, 34.0f, 0.39f, theme::CRIMSON_DARK);
 
             if (!app.hasGenEncounter) {
                 drawText(buf, "Tap [Roll Encounter] below to build a fight!", 10.0f, 70.0f, 0.42f, theme::INK_MUTED);
@@ -563,55 +563,55 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
                         cy += 18.0f;
                     }
                 }
-                drawText(buf, "Tap [Send to Fight Tracker] to roll initiative!", 10.0f, 198.0f, 0.36f, theme::FELT);
+                drawText(buf, "Tap [Send to Fight Tracker] to roll initiative!", 10.0f, 198.0f, 0.39f, theme::FELT);
             }
         }
     } else if (app.toolsSubTab == 1) {
         drawText(buf, "NPC & POST-FIGHT LOOT GENERATORS", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
         float cy = 34.0f;
-        drawText(buf, "NPC on the Spot:", 10.0f, cy, 0.40f, theme::CRIMSON_DARK); cy += 18.0f;
+        drawText(buf, "NPC on the Spot:", 10.0f, cy, 0.42f, theme::CRIMSON_DARK); cy += 18.0f;
         if (app.hasGenNpc) {
             char nb[80];
             std::snprintf(nb, sizeof(nb), "%s  (%s %s)",
                           app.lastGenNpc.name.c_str(), app.lastGenNpc.ancestry.c_str(),
                           app.lastGenNpc.occupation.c_str());
             drawText(buf, nb, 14.0f, cy, 0.40f, theme::INK); cy += 16.0f;
-            auto qlines = wrapLines(app.lastGenNpc.quirk, 58);
+            auto qlines = wrapLines(app.lastGenNpc.quirk, 56);
             for (const auto& ln : qlines) {
-                drawText(buf, ln.c_str(), 14.0f, cy, 0.36f, theme::INK_MUTED);
+                drawText(buf, ln.c_str(), 14.0f, cy, 0.38f, theme::INK_MUTED);
                 cy += 14.0f;
             }
         } else {
-            drawText(buf, "Tap [Roll NPC] below.", 14.0f, cy, 0.38f, theme::INK_MUTED); cy += 18.0f;
+            drawText(buf, "Tap [Roll NPC] below.", 14.0f, cy, 0.40f, theme::INK_MUTED); cy += 18.0f;
         }
 
         cy = 114.0f;
         C2D_DrawRectSolid(8.0f, cy - 6.0f, 0.25f, 384.0f, 1.0f, theme::PARCHMENT_EDGE);
-        drawText(buf, "Treasure & Loot:", 10.0f, cy, 0.40f, theme::CRIMSON_DARK); cy += 18.0f;
+        drawText(buf, "Treasure & Loot:", 10.0f, cy, 0.42f, theme::CRIMSON_DARK); cy += 18.0f;
         if (app.hasGenLoot) {
             drawText(buf, app.lastGenLoot.summary.c_str(), 14.0f, cy, 0.40f, theme::INK); cy += 17.0f;
             if (!app.lastGenLoot.gemOrArt.empty()) {
                 std::string g = "Gem/Art: " + app.lastGenLoot.gemOrArt;
-                drawText(buf, g.c_str(), 14.0f, cy, 0.36f, theme::INK); cy += 15.0f;
+                drawText(buf, g.c_str(), 14.0f, cy, 0.39f, theme::INK); cy += 16.0f;
             }
             for (const auto& it : app.lastGenLoot.items) {
-                auto ilines = wrapLines(std::string("- ") + it, 58);
+                auto ilines = wrapLines(std::string("- ") + it, 56);
                 for (const auto& ln : ilines) {
                     if (cy < 228.0f) {
-                        drawText(buf, ln.c_str(), 14.0f, cy, 0.35f, theme::SPELL_BLUE);
-                        cy += 14.0f;
+                        drawText(buf, ln.c_str(), 14.0f, cy, 0.38f, theme::SPELL_BLUE);
+                        cy += 14.5f;
                     }
                 }
             }
         } else {
-            drawText(buf, "Tap [Pocket Loot] or [Hoard Loot] below.", 14.0f, cy, 0.38f, theme::INK_MUTED);
+            drawText(buf, "Tap [Pocket Loot] or [Hoard Loot] below.", 14.0f, cy, 0.40f, theme::INK_MUTED);
         }
     } else if (app.toolsSubTab == 2) {
         drawText(buf, "ON-DEVICE HOMEBREW CREATOR", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
         char typeHdr[64];
-        std::snprintf(typeHdr, sizeof(typeHdr), "Draft %s  (Saved to sdmc:/3ds/DM_Toolkit/homebrew/)",
+        std::snprintf(typeHdr, sizeof(typeHdr), "Draft %s  (sdmc:/3ds/DM_Toolkit/homebrew/)",
                       app.hbIsSpell ? "Spell" : "Monster");
-        drawText(buf, typeHdr, 10.0f, 32.0f, 0.34f, theme::INK_MUTED);
+        drawText(buf, typeHdr, 10.0f, 32.0f, 0.38f, theme::INK_MUTED);
 
         char nameBuf[64];
         std::snprintf(nameBuf, sizeof(nameBuf), "Name: %.36s", app.hbName.c_str());
@@ -624,26 +624,26 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
             drawText(buf, statBuf, 10.0f, 80.0f, 0.42f, theme::INK);
             char actHdr[64];
             std::snprintf(actHdr, sizeof(actHdr), "Primary Action: %.32s", app.hbActionName.c_str());
-            drawText(buf, actHdr, 10.0f, 104.0f, 0.38f, theme::FELT);
+            drawText(buf, actHdr, 10.0f, 104.0f, 0.40f, theme::FELT);
         } else {
             char lvlBuf[64];
             std::snprintf(lvlBuf, sizeof(lvlBuf), "Spell Level: %d   |   School: Custom", app.hbSpellLevel);
             drawText(buf, lvlBuf, 10.0f, 80.0f, 0.42f, theme::SPELL_BLUE);
         }
 
-        auto dlines = wrapLines(app.hbDesc, 58);
+        auto dlines = wrapLines(app.hbDesc, 56);
         float cy = 128.0f;
         for (const auto& ln : dlines) {
             if (cy < 208.0f) {
-                drawText(buf, ln.c_str(), 10.0f, cy, 0.36f, theme::INK);
-                cy += 14.0f;
+                drawText(buf, ln.c_str(), 10.0f, cy, 0.39f, theme::INK);
+                cy += 14.5f;
             }
         }
         char cntBuf[80];
         std::snprintf(cntBuf, sizeof(cntBuf), "Loaded Custom: %u Monsters, %u Spells (SD active)",
                       static_cast<unsigned>(app.db.homebrewMonsterCount()),
                       static_cast<unsigned>(app.db.homebrewSpellCount()));
-        drawText(buf, cntBuf, 10.0f, 218.0f, 0.33f, theme::INK_MUTED);
+        drawText(buf, cntBuf, 10.0f, 216.0f, 0.38f, theme::INK_MUTED);
     } else if (app.toolsSubTab == 5) {
         drawText(buf, "CREDITS & OPEN CONTENT LICENSE (CC-BY-4.0)", 8.0f, 5.0f, 0.44f, theme::GOLD_BRIGHT);
         const char* legal =
@@ -654,10 +654,10 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
             "available at https://creativecommons.org/licenses/by/4.0/legalcode.\n\n"
             "SD Card Homebrew Overlay:\n"
             "Drop custom JSON packs into sdmc:/3ds/DM_Toolkit/homebrew/ or create them in [Brew].";
-        auto lines = wrapLines(legal, 58);
+        auto lines = wrapLines(legal, 56);
         float cy = 36.0f;
         for (const auto& ln : lines) {
-            drawText(buf, ln.c_str(), 10.0f, cy, 0.37f, theme::INK);
+            drawText(buf, ln.c_str(), 10.0f, cy, 0.39f, theme::INK);
             cy += 14.0f;
         }
     } else {
@@ -666,26 +666,26 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
                       app.campaign.name.c_str(), static_cast<unsigned>(app.campaign.partyLevel));
         drawText(buf, hdr, 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
 
-        drawText(buf, "Party Roster (sdmc:/3ds/DM_Toolkit/party/):", 10.0f, 34.0f, 0.38f, theme::CRIMSON_DARK);
+        drawText(buf, "Party Roster (sdmc:/3ds/DM_Toolkit/party/):", 10.0f, 34.0f, 0.39f, theme::CRIMSON_DARK);
         float cy = 54.0f;
         for (size_t i = 0; i < app.campaign.party.size(); ++i) {
             const auto& p = app.campaign.party[i];
             char pb[80];
-            std::snprintf(pb, sizeof(pb), "%s%.14s (Lv%u %.8s) | HP %d | AC %u | %+d",
+            std::snprintf(pb, sizeof(pb), "%s%.13s (Lv%u %.7s) | HP %d | AC %u | %+d",
                           (static_cast<int>(i) == app.partySelectedIdx ? "> " : "  "),
                           p.name.c_str(), static_cast<unsigned>(p.level), p.className.c_str(),
                           p.maxHp, static_cast<unsigned>(p.ac), static_cast<int>(p.initBonus));
-            drawText(buf, pb, 10.0f, cy, 0.34f, (static_cast<int>(i) == app.partySelectedIdx) ? theme::CRIMSON : theme::INK);
-            cy += 16.0f;
+            drawText(buf, pb, 10.0f, cy, 0.38f, (static_cast<int>(i) == app.partySelectedIdx) ? theme::CRIMSON : theme::INK);
+            cy += 16.5f;
         }
 
         char stats[96];
-        std::snprintf(stats, sizeof(stats), "SRD: %u Monsters, %u Spells, %u Refs | %zu Campaigns",
+        std::snprintf(stats, sizeof(stats), "SRD: %u Mon, %u Spl, %u Refs | %zu Campaigns",
                       static_cast<unsigned>(app.db.monsterCount()),
                       static_cast<unsigned>(app.db.spellCount()),
                       static_cast<unsigned>(app.db.refCount()),
                       app.campaigns.size());
-        drawText(buf, stats, 10.0f, 218.0f, 0.33f, theme::INK_MUTED);
+        drawText(buf, stats, 10.0f, 216.0f, 0.38f, theme::INK_MUTED);
     }
 }
 
@@ -738,13 +738,13 @@ void renderBottomTitleSplash(C2D_TextBuf buf, C2D_SpriteSheet sheet, const AppSt
                   static_cast<unsigned>(app.db.monsterCount()),
                   static_cast<unsigned>(app.db.spellCount()),
                   static_cast<unsigned>(app.db.searchEntryCount()));
-    drawTextCentered(buf, statBuf, Rect{14.0f, 94.0f, 292.0f, 20.0f}, 0.36f, theme::PARCHMENT, 0.55f);
+    drawTextCentered(buf, statBuf, Rect{14.0f, 94.0f, 292.0f, 20.0f}, 0.40f, theme::PARCHMENT, 0.55f);
 
     drawButton(buf, Rect{36.0f, 130.0f, 248.0f, 52.0f}, "ENTER DM SCREEN  [A]",
                theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.50f);
 
     drawTextCentered(buf, "Tap anywhere or press any button to begin",
-                     Rect{14.0f, 194.0f, 292.0f, 20.0f}, 0.34f, theme::PARCHMENT_ALT, 0.55f);
+                     Rect{14.0f, 194.0f, 292.0f, 20.0f}, 0.40f, theme::PARCHMENT_ALT, 0.55f);
 }
 
 // ── Bottom Screen Renderers (320x240) ─────────────────────────────────
@@ -759,7 +759,7 @@ void drawModeTabs(C2D_TextBuf buf, C2D_SpriteSheet sheet, AppMode active) {
                           sel ? theme::GOLD : theme::WALNUT);
         drawSprite(sheet, SPR_ICON_FIGHT + static_cast<size_t>(i),
                    r.x + 4.0f, r.y + 6.0f, 0.50f, 0.80f, 0.80f);
-        drawText(buf, labels[i], r.x + 22.0f, r.y + 8.0f, 0.34f,
+        drawText(buf, labels[i], r.x + 22.0f, r.y + 7.0f, 0.38f,
                  sel ? theme::INK : theme::PARCHMENT, 0.55f);
     }
 }
@@ -773,12 +773,12 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
         if (totalPages > 1) {
             std::snprintf(encHdr, sizeof(encHdr), "Saved Encounters (%d/%d):", page + 1, totalPages);
         } else {
-            std::snprintf(encHdr, sizeof(encHdr), "Saved Encounters (Tap to Roll Initiative):");
+            std::snprintf(encHdr, sizeof(encHdr), "Saved Encounters (Tap to Roll):");
         }
-        drawText(buf, encHdr, 8.0f, 34.0f, 0.38f, theme::PARCHMENT);
+        drawText(buf, encHdr, 8.0f, 34.0f, 0.40f, theme::PARCHMENT);
         if (totalPages > 1) {
-            drawButton(buf, Rect{248.0f, 30.0f, 30.0f, 20.0f}, "<", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
-            drawButton(buf, Rect{282.0f, 30.0f, 30.0f, 20.0f}, ">", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
+            drawButton(buf, Rect{248.0f, 30.0f, 30.0f, 20.0f}, "<", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.42f);
+            drawButton(buf, Rect{282.0f, 30.0f, 30.0f, 20.0f}, ">", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.42f);
         }
         float y = 54.0f;
         for (int i = 0; i < 3; ++i) {
@@ -794,7 +794,7 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
     }
 
     if (app.fightPanel == FIGHT_PANEL_CONDITIONS) {
-        drawText(buf, "Toggle Conditions (Tap Pill):", 8.0f, 32.0f, 0.38f, theme::GOLD_BRIGHT);
+        drawText(buf, "Toggle Conditions (Tap Pill):", 8.0f, 32.0f, 0.40f, theme::GOLD_BRIGHT);
         const Combatant& c = app.tracker.combatants()[static_cast<size_t>(app.tracker.selectedIndex())];
         for (int i = 0; i < CONDITION_COUNT; ++i) {
             int col = i % 3;
@@ -804,7 +804,7 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
             drawButton(buf, r, conditionIndexToName(i),
                        on ? theme::COND_BADGE : theme::WALNUT_LIGHT,
                        on ? theme::GOLD_BRIGHT : theme::WALNUT_DARK,
-                       theme::WHITE, 0.36f);
+                       theme::WHITE, 0.40f);
         }
         drawButton(buf, Rect{6.0f, 202.0f, 148.0f, 32.0f}, "Clear Conditions", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.40f);
         drawButton(buf, Rect{166.0f, 202.0f, 148.0f, 32.0f}, "Done", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.44f);
@@ -813,7 +813,7 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
 
     if (app.fightPanel == FIGHT_PANEL_END_CONFIRM) {
         drawText(buf, "End this fight and clear the tracker?", 20.0f, 58.0f, 0.46f, theme::PARCHMENT);
-        drawText(buf, "(Your campaign & party stay saved.)", 36.0f, 82.0f, 0.38f, theme::PARCHMENT_ALT);
+        drawText(buf, "(Your campaign & party stay saved.)", 36.0f, 82.0f, 0.40f, theme::PARCHMENT_ALT);
         drawButton(buf, Rect{12.0f, 118.0f, 94.0f, 46.0f}, "Cancel", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::WHITE, 0.42f);
         drawButton(buf, Rect{113.0f, 118.0f, 94.0f, 46.0f}, "Roll Loot", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.42f);
         drawButton(buf, Rect{214.0f, 118.0f, 94.0f, 46.0f}, "End Fight", theme::CRIMSON, theme::GOLD, theme::WHITE, 0.42f);
@@ -824,7 +824,7 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
         const Combatant& c = app.tracker.combatants()[static_cast<size_t>(app.tracker.selectedIndex())];
         char hdr[64];
         std::snprintf(hdr, sizeof(hdr), "Custom HP for %.18s (%d/%d)", c.displayName.c_str(), c.currentHp, c.maxHp);
-        drawText(buf, hdr, 8.0f, 32.0f, 0.38f, theme::GOLD_BRIGHT);
+        drawText(buf, hdr, 8.0f, 32.0f, 0.40f, theme::GOLD_BRIGHT);
 
         // 3x4 keypad on left (x = 6..184, y = 50..232)
         const char* keys[12] = {"1","2","3","4","5","6","7","8","9","Clr","0","Back"};
@@ -851,12 +851,12 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
     char selHdr[72];
     std::snprintf(selHdr, sizeof(selHdr), "%.12s | HP %d/%d (%s)",
                   c.displayName.c_str(), c.currentHp, c.maxHp, hpStatus);
-    drawText(buf, selHdr, 6.0f, 32.0f, 0.36f, c.isPlayer ? theme::GOLD_BRIGHT : theme::PARCHMENT);
-    drawButton(buf, Rect{252.0f, 29.0f, 28.0f, 20.0f}, "<", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
-    drawButton(buf, Rect{284.0f, 29.0f, 28.0f, 20.0f}, ">", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
+    drawText(buf, selHdr, 6.0f, 30.0f, 0.39f, c.isPlayer ? theme::GOLD_BRIGHT : theme::PARCHMENT);
+    drawButton(buf, Rect{252.0f, 29.0f, 28.0f, 20.0f}, "<", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+    drawButton(buf, Rect{284.0f, 29.0f, 28.0f, 20.0f}, ">", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
 
-    drawText(buf, "DAMAGE", 66.0f, 45.0f, 0.27f, theme::HP_CRIT);
-    drawText(buf, "HEAL", 238.0f, 45.0f, 0.27f, theme::HP_GOOD);
+    drawTextCentered(buf, "DAMAGE", Rect{6.0f, 43.0f, 182.0f, 13.0f}, 0.38f, rgba32(255, 110, 110));
+    drawTextCentered(buf, "HEAL",   Rect{194.0f, 43.0f, 120.0f, 13.0f}, 0.38f, rgba32(110, 225, 135));
 
     drawButton(buf, Rect{6.0f,   56.0f, 58.0f, 40.0f}, "-10", theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.46f);
     drawButton(buf, Rect{68.0f,  56.0f, 58.0f, 40.0f}, "-5",  theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.46f);
@@ -864,36 +864,36 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
     drawButton(buf, Rect{194.0f, 56.0f, 58.0f, 40.0f}, "+1",  theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.46f);
     drawButton(buf, Rect{256.0f, 56.0f, 58.0f, 40.0f}, "+5",  theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.46f);
 
-    drawButton(buf, Rect{6.0f,   102.0f, 96.0f, 38.0f}, "Conditions", theme::COND_BADGE, theme::GOLD_DARK, theme::WHITE, 0.38f);
-    drawButton(buf, Rect{106.0f, 102.0f, 50.0f, 38.0f}, "Init-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
-    drawButton(buf, Rect{160.0f, 102.0f, 50.0f, 38.0f}, "Init+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
+    drawButton(buf, Rect{6.0f,   102.0f, 96.0f, 38.0f}, "Conditions", theme::COND_BADGE, theme::GOLD_DARK, theme::WHITE, 0.40f);
+    drawButton(buf, Rect{106.0f, 102.0f, 50.0f, 38.0f}, "Init-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+    drawButton(buf, Rect{160.0f, 102.0f, 50.0f, 38.0f}, "Init+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
     drawButton(buf, Rect{214.0f, 102.0f, 100.0f, 38.0f},
                app.combatRulesDrawerOpen ? "Hide Rules" : "Combat Rules",
-               theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.36f);
+               theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.38f);
 
     drawButton(buf, Rect{6.0f,   148.0f, 184.0f, 46.0f}, "NEXT TURN  [A/R]", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.46f);
     drawButton(buf, Rect{196.0f, 148.0f, 118.0f, 46.0f}, "+ Monster", theme::FELT, theme::GOLD, theme::WHITE, 0.42f);
 
     drawButton(buf, Rect{6.0f,   200.0f, 58.0f, 34.0f}, "Undo",
                app.tracker.canUndoHp() ? theme::AMBER_HDR : theme::WALNUT_DARK,
-               theme::GOLD_DARK, theme::WHITE, 0.35f);
-    drawButton(buf, Rect{68.0f,  200.0f, 72.0f, 34.0f}, "Cust HP", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.34f);
-    drawButton(buf, Rect{144.0f, 200.0f, 70.0f, 34.0f}, "Roll Atk", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.34f);
-    drawButton(buf, Rect{218.0f, 200.0f, 38.0f, 34.0f}, "Rm", theme::WALNUT_DARK, theme::GOLD_DARK, theme::PARCHMENT, 0.34f);
-    drawButton(buf, Rect{260.0f, 200.0f, 54.0f, 34.0f}, "End", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.35f);
+               theme::GOLD_DARK, theme::WHITE, 0.39f);
+    drawButton(buf, Rect{68.0f,  200.0f, 72.0f, 34.0f}, "Cust HP", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.38f);
+    drawButton(buf, Rect{144.0f, 200.0f, 70.0f, 34.0f}, "Roll Atk", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.38f);
+    drawButton(buf, Rect{218.0f, 200.0f, 38.0f, 34.0f}, "Rm", theme::WALNUT_DARK, theme::GOLD_DARK, theme::PARCHMENT, 0.39f);
+    drawButton(buf, Rect{260.0f, 200.0f, 54.0f, 34.0f}, "End", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
 }
 
 void renderBottomManual(C2D_TextBuf buf, const AppState& app) {
     C2D_DrawRectSolid(6.0f, 32.0f, 0.25f, 148.0f, 24.0f, theme::PARCHMENT);
     char qBuf[40];
     std::snprintf(qBuf, sizeof(qBuf), "Search: %s_", app.monsterQuery.c_str());
-    drawText(buf, qBuf, 10.0f, 36.0f, 0.38f, theme::INK);
+    drawText(buf, qBuf, 10.0f, 36.0f, 0.39f, theme::INK);
 
     const char* crLbl[CR_FILTER_COUNT] = {"CR:All", "CR:0-1", "CR:2-4", "CR:5-10", "CR:11+"};
     const char* tpLbl = (app.monsterTypeFilter < 0) ? "Type:All" : monsterTypeToString(static_cast<uint8_t>(app.monsterTypeFilter));
-    drawButton(buf, Rect{158.0f, 32.0f, 66.0f, 24.0f}, tpLbl, theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.32f);
-    drawButton(buf, Rect{226.0f, 32.0f, 54.0f, 24.0f}, crLbl[app.monsterCrFilter], theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.32f);
-    drawButton(buf, Rect{282.0f, 32.0f, 34.0f, 24.0f}, "Clr", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.34f);
+    drawButton(buf, Rect{158.0f, 32.0f, 66.0f, 24.0f}, tpLbl, theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+    drawButton(buf, Rect{226.0f, 32.0f, 54.0f, 24.0f}, crLbl[app.monsterCrFilter], theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+    drawButton(buf, Rect{282.0f, 32.0f, 34.0f, 24.0f}, "Clr", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.40f);
 
     for (int i = 0; i < 3; ++i) {
         int idx = app.monsterListScroll + i;
@@ -909,15 +909,15 @@ void renderBottomManual(C2D_TextBuf buf, const AppState& app) {
 
         char rowLbl[40];
         std::snprintf(rowLbl, sizeof(rowLbl), "%.17s%s", mv.name, mv.isHomebrew ? " [HB]" : "");
-        drawText(buf, rowLbl, 11.0f, ry + 2.0f, 0.38f, theme::INK);
+        drawText(buf, rowLbl, 11.0f, ry + 1.0f, 0.39f, theme::INK);
 
         char subLbl[40];
         std::snprintf(subLbl, sizeof(subLbl), "%s | CR %s | HP %u",
                       monsterTypeToString(mv.type), crIndexToString(mv.crIndex), static_cast<unsigned>(mv.hitPoints));
-        drawText(buf, subLbl, 11.0f, ry + 16.0f, 0.30f, theme::INK_MUTED);
+        drawText(buf, subLbl, 11.0f, ry + 15.0f, 0.38f, theme::INK_MUTED);
 
-        drawButton(buf, Rect{214.0f, ry, 46.0f, 30.0f}, "+Prep", theme::SPELL_BLUE, theme::GOLD_DARK, theme::WHITE, 0.33f);
-        drawButton(buf, Rect{262.0f, ry, 52.0f, 30.0f}, "+Fgt", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.35f);
+        drawButton(buf, Rect{214.0f, ry, 46.0f, 30.0f}, "+Prep", theme::SPELL_BLUE, theme::GOLD_DARK, theme::WHITE, 0.38f);
+        drawButton(buf, Rect{262.0f, ry, 52.0f, 30.0f}, "+Fgt", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.39f);
     }
 
     drawQwertyKeypad(buf);
@@ -931,7 +931,7 @@ void renderBottomDice(C2D_TextBuf buf, const AppState& app) {
         drawButton(buf, r, DiceRoller::shapeLabel(static_cast<DieShape>(i)),
                    sel ? theme::GOLD : theme::WALNUT_LIGHT,
                    sel ? theme::GOLD_BRIGHT : theme::WALNUT_DARK,
-                   sel ? theme::INK : theme::PARCHMENT, 0.38f);
+                   sel ? theme::INK : theme::PARCHMENT, 0.40f);
     }
 
     // Row 2: Multi-dice pool count steppers (- / +) & presets (y = 68..100)
@@ -949,14 +949,14 @@ void renderBottomDice(C2D_TextBuf buf, const AppState& app) {
         drawButton(buf, r, presetLbls[i],
                    sel ? theme::GOLD : theme::WALNUT_LIGHT,
                    sel ? theme::GOLD_BRIGHT : theme::WALNUT_DARK,
-                   sel ? theme::INK : theme::PARCHMENT, 0.34f);
+                   sel ? theme::INK : theme::PARCHMENT, 0.40f);
     }
 
     // Row 3: Modifier & Advantage/Disadvantage (y = 104..136)
     char modLbl[24];
     std::snprintf(modLbl, sizeof(modLbl), "Mod %+d", app.diceMod);
     drawButton(buf, Rect{6.0f,   104.0f, 44.0f, 32.0f}, "-1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.42f);
-    drawButton(buf, Rect{54.0f,  104.0f, 76.0f, 32.0f}, modLbl, theme::WALNUT_DARK, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.38f);
+    drawButton(buf, Rect{54.0f,  104.0f, 76.0f, 32.0f}, modLbl, theme::WALNUT_DARK, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.40f);
     drawButton(buf, Rect{134.0f, 104.0f, 44.0f, 32.0f}, "+1", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.42f);
 
     const char* advStr = (app.diceAdvMode == ROLL_ADVANTAGE) ? "Advantage"
@@ -965,7 +965,7 @@ void renderBottomDice(C2D_TextBuf buf, const AppState& app) {
     uint32_t advCol = (app.diceAdvMode == ROLL_ADVANTAGE) ? theme::HP_GOOD
                     : (app.diceAdvMode == ROLL_DISADVANTAGE) ? theme::CRIMSON
                     : theme::WALNUT_LIGHT;
-    drawButton(buf, Rect{186.0f, 104.0f, 128.0f, 32.0f}, advStr, advCol, theme::GOLD, theme::WHITE, 0.38f);
+    drawButton(buf, Rect{186.0f, 104.0f, 128.0f, 32.0f}, advStr, advCol, theme::GOLD, theme::WHITE, 0.40f);
 
     // Row 4: Huge ROLL button (y = 142..188)
     char rollLbl[40];
@@ -983,8 +983,8 @@ void renderBottomDice(C2D_TextBuf buf, const AppState& app) {
     char dSkinLbl[40], tSkinLbl[40];
     std::snprintf(dSkinLbl, sizeof(dSkinLbl), "Die: %s", getDiceSkin(app.diceSkinIdx).name);
     std::snprintf(tSkinLbl, sizeof(tSkinLbl), "Tray: %s", getTraySkin(app.traySkinIdx).name);
-    drawButton(buf, Rect{6.0f,   194.0f, 150.0f, 40.0f}, dSkinLbl, theme::WALNUT_LIGHT, theme::GOLD, theme::GOLD_BRIGHT, 0.34f);
-    drawButton(buf, Rect{164.0f, 194.0f, 150.0f, 40.0f}, tSkinLbl, theme::FELT, theme::GOLD, theme::WHITE, 0.34f);
+    drawButton(buf, Rect{6.0f,   194.0f, 150.0f, 40.0f}, dSkinLbl, theme::WALNUT_LIGHT, theme::GOLD, theme::GOLD_BRIGHT, 0.40f);
+    drawButton(buf, Rect{164.0f, 194.0f, 150.0f, 40.0f}, tSkinLbl, theme::FELT, theme::GOLD, theme::WHITE, 0.40f);
 }
 
 void renderBottomRules(C2D_TextBuf buf, const AppState& app) {
@@ -994,15 +994,15 @@ void renderBottomRules(C2D_TextBuf buf, const AppState& app) {
         Rect r{4.0f + i * 62.5f, 30.0f, 60.0f, 20.0f};
         bool sel = (static_cast<int>(app.refTab) == i);
         drawButton(buf, r, tabs[i], sel ? theme::GOLD : theme::WALNUT_LIGHT, theme::WALNUT_DARK,
-                   sel ? theme::INK : theme::PARCHMENT, 0.33f);
+                   sel ? theme::INK : theme::PARCHMENT, 0.38f);
     }
 
     // Search bar + Clear (y = 53..74)
     C2D_DrawRectSolid(6.0f, 53.0f, 0.25f, 266.0f, 21.0f, theme::PARCHMENT);
     char qBuf[44];
     std::snprintf(qBuf, sizeof(qBuf), "Find: %s_", app.ruleQuery.c_str());
-    drawText(buf, qBuf, 10.0f, 56.0f, 0.36f, theme::INK);
-    drawButton(buf, Rect{276.0f, 53.0f, 38.0f, 21.0f}, "Clr", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.33f);
+    drawText(buf, qBuf, 10.0f, 55.0f, 0.39f, theme::INK);
+    drawButton(buf, Rect{276.0f, 53.0f, 38.0f, 21.0f}, "Clr", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
 
     // 3 visible reference rows (y = 77..160)
     for (int i = 0; i < 3; ++i) {
@@ -1033,11 +1033,11 @@ void renderBottomRules(C2D_TextBuf buf, const AppState& app) {
         C2D_DrawRectSolid(6.0f, ry, 0.2f, 308.0f, 26.0f, sel ? theme::GOLD : theme::WALNUT_LIGHT);
         C2D_DrawRectSolid(7.0f, ry + 1.0f, 0.25f, 306.0f, 24.0f, sel ? theme::ACTIVE_ROW : theme::PARCHMENT);
         char tBuf[28];
-        std::snprintf(tBuf, sizeof(tBuf), "%.24s", title);
-        drawText(buf, tBuf, 12.0f, ry + 4.0f, 0.37f, theme::INK);
+        std::snprintf(tBuf, sizeof(tBuf), "%.21s", title);
+        drawText(buf, tBuf, 12.0f, ry + 4.0f, 0.39f, theme::INK);
         char bBuf[20];
-        std::snprintf(bBuf, sizeof(bBuf), "%.16s", badge);
-        drawText(buf, bBuf, 210.0f, ry + 5.0f, 0.31f, badgeCol);
+        std::snprintf(bBuf, sizeof(bBuf), "%.13s", badge);
+        drawText(buf, bBuf, 204.0f, ry + 4.0f, 0.38f, badgeCol);
     }
 
     drawQwertyKeypad(buf);
@@ -1049,21 +1049,21 @@ void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
         Rect r{4.0f + i * 52.0f, 32.0f, 50.0f, 26.0f};
         bool sel = (app.toolsSubTab == i);
         drawButton(buf, r, sub[i], sel ? theme::GOLD : theme::WALNUT_LIGHT, theme::WALNUT_DARK,
-                   sel ? theme::INK : theme::PARCHMENT, 0.33f);
+                   sel ? theme::INK : theme::PARCHMENT, 0.38f);
     }
 
     if (app.toolsSubTab == 0) {
         drawButton(buf, Rect{6.0f,   62.0f, 150.0f, 26.0f}, "Random Gen",
                    !app.encBuilderView ? theme::GOLD : theme::WALNUT_DARK, theme::GOLD_DARK,
-                   !app.encBuilderView ? theme::INK : theme::PARCHMENT, 0.36f);
+                   !app.encBuilderView ? theme::INK : theme::PARCHMENT, 0.40f);
         drawButton(buf, Rect{164.0f, 62.0f, 150.0f, 26.0f}, "Prep Builder",
                    app.encBuilderView ? theme::GOLD : theme::WALNUT_DARK, theme::GOLD_DARK,
-                   app.encBuilderView ? theme::INK : theme::PARCHMENT, 0.36f);
+                   app.encBuilderView ? theme::INK : theme::PARCHMENT, 0.40f);
 
         if (app.encBuilderView) {
-            drawButton(buf, Rect{6.0f,   94.0f, 98.0f, 38.0f}, "Qty -1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.38f);
-            drawButton(buf, Rect{111.0f, 94.0f, 98.0f, 38.0f}, "Qty +1", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.38f);
-            drawButton(buf, Rect{216.0f, 94.0f, 98.0f, 38.0f}, "Clear", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+            drawButton(buf, Rect{6.0f,   94.0f, 98.0f, 38.0f}, "Qty -1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.40f);
+            drawButton(buf, Rect{111.0f, 94.0f, 98.0f, 38.0f}, "Qty +1", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.40f);
+            drawButton(buf, Rect{216.0f, 94.0f, 98.0f, 38.0f}, "Clear", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
             drawButton(buf, Rect{6.0f,  138.0f, 308.0f, 42.0f}, "Save Encounter to Campaign",
                        app.draftEncounter.slots.empty() ? theme::WALNUT_DARK : theme::GOLD,
                        theme::WALNUT_DARK,
@@ -1075,8 +1075,8 @@ void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
             char tLbl[32], dLbl[32];
             std::snprintf(tLbl, sizeof(tLbl), "Terrain: %s", terrainToString(app.genTerrain));
             std::snprintf(dLbl, sizeof(dLbl), "Diff: %s", Generators::difficultyToString(app.genDifficulty));
-            drawButton(buf, Rect{6.0f,   94.0f, 150.0f, 38.0f}, tLbl, theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.37f);
-            drawButton(buf, Rect{164.0f, 94.0f, 150.0f, 38.0f}, dLbl, theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.37f);
+            drawButton(buf, Rect{6.0f,   94.0f, 150.0f, 38.0f}, tLbl, theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+            drawButton(buf, Rect{164.0f, 94.0f, 150.0f, 38.0f}, dLbl, theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
             drawButton(buf, Rect{6.0f,  138.0f, 308.0f, 42.0f}, "Roll Random Encounter", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.44f);
             drawButton(buf, Rect{6.0f,  186.0f, 308.0f, 42.0f}, "Send to Fight Tracker",
                        app.hasGenEncounter ? theme::FELT_LIGHT : theme::WALNUT_DARK, theme::GOLD, theme::WHITE, 0.42f);
@@ -1088,48 +1088,48 @@ void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
     } else if (app.toolsSubTab == 2) {
         drawButton(buf, Rect{6.0f,   62.0f, 150.0f, 26.0f}, "Custom Monster",
                    !app.hbIsSpell ? theme::GOLD : theme::WALNUT_DARK, theme::GOLD_DARK,
-                   !app.hbIsSpell ? theme::INK : theme::PARCHMENT, 0.36f);
+                   !app.hbIsSpell ? theme::INK : theme::PARCHMENT, 0.40f);
         drawButton(buf, Rect{164.0f, 62.0f, 150.0f, 26.0f}, "Custom Spell",
                    app.hbIsSpell ? theme::GOLD : theme::WALNUT_DARK, theme::GOLD_DARK,
-                   app.hbIsSpell ? theme::INK : theme::PARCHMENT, 0.36f);
+                   app.hbIsSpell ? theme::INK : theme::PARCHMENT, 0.40f);
 
         if (!app.hbIsSpell) {
-            drawButton(buf, Rect{6.0f,   92.0f, 98.0f, 34.0f}, "Name", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
-            drawButton(buf, Rect{110.0f, 92.0f, 98.0f, 34.0f}, "Act Name", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
-            drawButton(buf, Rect{214.0f, 92.0f, 100.0f, 34.0f}, "Act Desc", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
+            drawButton(buf, Rect{6.0f,   92.0f, 98.0f, 34.0f}, "Name", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+            drawButton(buf, Rect{110.0f, 92.0f, 98.0f, 34.0f}, "Act Name", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+            drawButton(buf, Rect{214.0f, 92.0f, 100.0f, 34.0f}, "Act Desc", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
         } else {
-            drawButton(buf, Rect{6.0f,   92.0f, 150.0f, 34.0f}, "Edit Name", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
-            drawButton(buf, Rect{164.0f, 92.0f, 150.0f, 34.0f}, "Edit Desc", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+            drawButton(buf, Rect{6.0f,   92.0f, 150.0f, 34.0f}, "Edit Name", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+            drawButton(buf, Rect{164.0f, 92.0f, 150.0f, 34.0f}, "Edit Desc", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
         }
 
         if (!app.hbIsSpell) {
-            drawButton(buf, Rect{6.0f,   132.0f, 48.0f, 36.0f}, "AC-", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.34f);
-            drawButton(buf, Rect{56.0f,  132.0f, 48.0f, 36.0f}, "AC+", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.34f);
-            drawButton(buf, Rect{110.0f, 132.0f, 48.0f, 36.0f}, "HP-5", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.33f);
-            drawButton(buf, Rect{160.0f, 132.0f, 48.0f, 36.0f}, "HP+5", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.33f);
-            drawButton(buf, Rect{214.0f, 132.0f, 48.0f, 36.0f}, "CR-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.34f);
-            drawButton(buf, Rect{264.0f, 132.0f, 50.0f, 36.0f}, "CR+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.34f);
+            drawButton(buf, Rect{6.0f,   132.0f, 48.0f, 36.0f}, "AC-", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
+            drawButton(buf, Rect{56.0f,  132.0f, 48.0f, 36.0f}, "AC+", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.39f);
+            drawButton(buf, Rect{110.0f, 132.0f, 48.0f, 36.0f}, "HP-5", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.38f);
+            drawButton(buf, Rect{160.0f, 132.0f, 48.0f, 36.0f}, "HP+5", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.38f);
+            drawButton(buf, Rect{214.0f, 132.0f, 48.0f, 36.0f}, "CR-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.39f);
+            drawButton(buf, Rect{264.0f, 132.0f, 50.0f, 36.0f}, "CR+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.39f);
         } else {
-            drawButton(buf, Rect{6.0f,   132.0f, 150.0f, 36.0f}, "Spell Lv -1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.38f);
-            drawButton(buf, Rect{164.0f, 132.0f, 150.0f, 36.0f}, "Spell Lv +1", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.38f);
+            drawButton(buf, Rect{6.0f,   132.0f, 150.0f, 36.0f}, "Spell Lv -1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.40f);
+            drawButton(buf, Rect{164.0f, 132.0f, 150.0f, 36.0f}, "Spell Lv +1", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.40f);
         }
 
         drawButton(buf, Rect{6.0f, 176.0f, 308.0f, 46.0f}, "Save Homebrew to SD & Reload",
                    theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.44f);
     } else if (app.toolsSubTab == 3) {
-        drawButton(buf, Rect{6.0f,   66.0f, 98.0f, 36.0f}, "+ Add Hero", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.36f);
-        drawButton(buf, Rect{109.0f, 66.0f, 98.0f, 36.0f}, "Rename", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.36f);
-        drawButton(buf, Rect{212.0f, 66.0f, 102.0f, 36.0f}, "Import SD", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.36f);
+        drawButton(buf, Rect{6.0f,   66.0f, 98.0f, 36.0f}, "+ Add Hero", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.40f);
+        drawButton(buf, Rect{109.0f, 66.0f, 98.0f, 36.0f}, "Rename", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+        drawButton(buf, Rect{212.0f, 66.0f, 102.0f, 36.0f}, "Import SD", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.40f);
 
-        drawButton(buf, Rect{6.0f,   108.0f, 72.0f, 36.0f}, "Init -1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.35f);
-        drawButton(buf, Rect{82.0f,  108.0f, 72.0f, 36.0f}, "Init +1", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.35f);
-        drawButton(buf, Rect{166.0f, 108.0f, 72.0f, 36.0f}, "HP -5", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.35f);
-        drawButton(buf, Rect{242.0f, 108.0f, 72.0f, 36.0f}, "HP +5", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.35f);
+        drawButton(buf, Rect{6.0f,   108.0f, 72.0f, 36.0f}, "Init -1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.40f);
+        drawButton(buf, Rect{82.0f,  108.0f, 72.0f, 36.0f}, "Init +1", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.40f);
+        drawButton(buf, Rect{166.0f, 108.0f, 72.0f, 36.0f}, "HP -5", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.40f);
+        drawButton(buf, Rect{242.0f, 108.0f, 72.0f, 36.0f}, "HP +5", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.40f);
 
-        drawButton(buf, Rect{6.0f,   150.0f, 72.0f, 34.0f}, "Lv -1", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.35f);
-        drawButton(buf, Rect{82.0f,  150.0f, 72.0f, 34.0f}, "Lv +1", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.35f);
-        drawButton(buf, Rect{166.0f, 150.0f, 148.0f, 34.0f}, "Save Campaign to SD", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.36f);
-        drawText(buf, "Drop hero JSONs in sdmc:/3ds/DM_Toolkit/party/", 8.0f, 194.0f, 0.31f, theme::PARCHMENT_ALT);
+        drawButton(buf, Rect{6.0f,   150.0f, 72.0f, 34.0f}, "Lv -1", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+        drawButton(buf, Rect{82.0f,  150.0f, 72.0f, 34.0f}, "Lv +1", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+        drawButton(buf, Rect{166.0f, 150.0f, 148.0f, 34.0f}, "Save Campaign to SD", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.39f);
+        drawText(buf, "JSONs: sdmc:/3ds/DM_Toolkit/party/", 8.0f, 194.0f, 0.38f, theme::PARCHMENT_ALT);
     } else if (app.toolsSubTab == 4) {
         int totalCamps = static_cast<int>(app.campaigns.size());
         int totalPages = std::max(1, (totalCamps + 2) / 3);
@@ -1151,18 +1151,18 @@ void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
             drawButton(buf, Rect{196.0f, 174.0f, 118.0f, 40.0f},
                        app.soundEnabled ? "Sound: ON" : "Sound: OFF",
                        app.soundEnabled ? theme::HP_GOOD : theme::CRIMSON_DARK,
-                       theme::GOLD, theme::WHITE, 0.36f);
+                       theme::GOLD, theme::WHITE, 0.40f);
         } else {
             drawButton(buf, Rect{6.0f,   174.0f, 180.0f, 40.0f}, "+ New Campaign", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.40f);
             drawButton(buf, Rect{192.0f, 174.0f, 122.0f, 40.0f},
                        app.soundEnabled ? "Sound: ON" : "Sound: OFF",
                        app.soundEnabled ? theme::HP_GOOD : theme::CRIMSON_DARK,
-                       theme::GOLD, theme::WHITE, 0.38f);
+                       theme::GOLD, theme::WHITE, 0.40f);
         }
     } else {
         drawText(buf, "DM's Toolkit v1.2", 10.0f, 80.0f, 0.48f, theme::GOLD_BRIGHT);
-        drawText(buf, "SRD 5.1 under CC-BY-4.0", 10.0f, 108.0f, 0.40f, theme::PARCHMENT);
-        drawText(buf, "See top screen for full legal notice.", 10.0f, 132.0f, 0.36f, theme::PARCHMENT_ALT);
+        drawText(buf, "SRD 5.1 under CC-BY-4.0", 10.0f, 108.0f, 0.42f, theme::PARCHMENT);
+        drawText(buf, "See top screen for full legal notice.", 10.0f, 134.0f, 0.40f, theme::PARCHMENT_ALT);
     }
 }
 

@@ -6,7 +6,7 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 
 * **Fight Tracker (Home Screen):**
   * Dual-column top screen: live Initiative Ladder (round counter, HP bars for both **Party Heroes and Monsters**, `HEALTHY / BLOODIED / DOWN` status badges, and condition badges) on the left and the selected monster's full stat block or hero's health card on the right.
-  * One-handed bottom touchscreen controls: clearly labeled **DAMAGE** (`-10 / -5 / -1`) and **HEAL** (`+1 / +5`) buttons, `< / >` **Target Cycling**, **1-tap `Undo`** for accidental HP taps, **Custom HP Numpad**, **1-Tap `[Roll Atk]`** straight into the Dice Tray, 15-condition toggle grid, `Init- / Init+` overrides, `[Rm]` combatant removal, mid-fight `[+ Monster]` additions, 1-tap **Combat Rules** drawer, paged **Saved Encounters**, automatic mid-combat SD auto-save, post-fight party HP sync, and `[Roll Loot]` on end-fight.
+  * One-handed bottom touchscreen controls: high-contrast, legible **DAMAGE** (`-10 / -5 / -1`) and **HEAL** (`+1 / +5`) labels and buttons, `< / >` **Target Cycling**, **1-tap `Undo`** for accidental HP taps, **Custom HP Numpad**, **1-Tap `[Roll Atk]`** straight into the Dice Tray, 15-condition toggle grid, `Init- / Init+` overrides, `[Rm]` combatant removal, mid-fight `[+ Monster]` additions, 1-tap **Combat Rules** drawer, paged **Saved Encounters**, automatic mid-combat SD auto-save, post-fight party HP sync, and `[Roll Loot]` on end-fight.
 * **Monster Manual & Encounter Prep Builder:**
   * All **334 SRD 5.1 monsters** with full stat blocks, traits, actions, reactions, and legendary actions.
   * Instant always-live bottom-screen QWERTY search (~20-30 us) plus **Monster Type** and **CR** filter pills, with 1-tap `[+Fgt]` (drop straight into live combat) and `[+Prep]` (add to Encounter Builder draft).
@@ -68,6 +68,15 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 * `gfx/sprites.t3s`: Sprite atlas manifest compiled into `romfs/gfx/sprites.t3x`.
 * `tools/compile_srd.py`: Offline SRD 5.1 binary compiler (`romfs/data/srd.bin`) with automated IP sanitization.
 * `source/` & `include/`: C++17 core engine (`srd_db`, `combat_tracker`, `campaign_io`, `generators`, `dice_roller`, `sound_fx`) and `citro2d` 3DS UI (`main`, `dice_view`).
+
+## Changelog
+
+* **v1.4.4:**
+  * Raised all sub-`0.38f` UI text scales across top and bottom screens (`0.38f–0.40f` minimum floor) to eliminate pixelated/illegible text on 240p 3DS screens.
+  * Centered and brightened the bottom-screen `DAMAGE` and `HEAL` labels for high-contrast readability against dark walnut.
+  * Adjusted compact stat-block and condition-badge sizing so larger text fits cleanly without clipping.
+* **v1.4.3:**
+  * Fixed code-review bugs (#21–#27) and polished documentation.
 
 ## Content and IP Attribution
 

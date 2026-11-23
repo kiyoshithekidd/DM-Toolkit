@@ -137,7 +137,7 @@ void renderTopDiceTray(C2D_TextBuf buf, C2D_SpriteSheet sheet, const AppState& a
     std::snprintf(trayInfo, sizeof(trayInfo), "%s  |  %s", skin.name, tray.name);
     C2D_TextParse(&lbl, buf, trayInfo);
     C2D_TextOptimize(&lbl);
-    C2D_DrawText(&lbl, C2D_WithColor, 26.0f, 24.0f, 0.55f, 0.32f, 0.32f, theme::GOLD_BRIGHT);
+    C2D_DrawText(&lbl, C2D_WithColor, 26.0f, 24.0f, 0.55f, 0.38f, 0.38f, theme::GOLD_BRIGHT);
 
     int activeN = app.dice.activeDieCount();
     if (activeN <= 2) {
@@ -214,7 +214,7 @@ void renderTopDiceTray(C2D_TextBuf buf, C2D_SpriteSheet sheet, const AppState& a
         C2D_Text bk;
         C2D_TextParse(&bk, buf, latest.label.c_str());
         C2D_TextOptimize(&bk);
-        C2D_DrawText(&bk, C2D_WithColor, 274.0f, 74.0f, 0.55f, 0.33f, 0.33f, theme::INK);
+        C2D_DrawText(&bk, C2D_WithColor, 274.0f, 74.0f, 0.55f, 0.38f, 0.38f, theme::INK);
 
         if (latest.rolls.size() > 1) {
             std::string rollList = "[";
@@ -226,22 +226,22 @@ void renderTopDiceTray(C2D_TextBuf buf, C2D_SpriteSheet sheet, const AppState& a
             C2D_Text rl;
             C2D_TextParse(&rl, buf, rollList.c_str());
             C2D_TextOptimize(&rl);
-            C2D_DrawText(&rl, C2D_WithColor, 274.0f, 89.0f, 0.55f, 0.29f, 0.29f, theme::INK_MUTED);
+            C2D_DrawText(&rl, C2D_WithColor, 274.0f, 90.0f, 0.55f, 0.38f, 0.38f, theme::INK_MUTED);
         }
     }
 
-    C2D_DrawRectSolid(274.0f, 106.0f, 0.2f, 120.0f, 1.0f, theme::PARCHMENT_EDGE);
+    C2D_DrawRectSolid(274.0f, 108.0f, 0.2f, 120.0f, 1.0f, theme::PARCHMENT_EDGE);
     C2D_Text hTitle;
     C2D_TextParse(&hTitle, buf, "Recent Rolls:");
     C2D_TextOptimize(&hTitle);
-    C2D_DrawText(&hTitle, C2D_WithColor, 274.0f, 111.0f, 0.55f, 0.35f, 0.35f, theme::INK_MUTED);
+    C2D_DrawText(&hTitle, C2D_WithColor, 274.0f, 113.0f, 0.55f, 0.40f, 0.40f, theme::INK_MUTED);
 
-    float hy = 128.0f;
+    float hy = 130.0f;
     for (size_t i = 0; i < app.dice.history().size() && i < 6; ++i) {
         C2D_Text ht;
         C2D_TextParse(&ht, buf, app.dice.history()[i].label.c_str());
         C2D_TextOptimize(&ht);
-        C2D_DrawText(&ht, C2D_WithColor, 274.0f, hy, 0.55f, 0.32f, 0.32f,
+        C2D_DrawText(&ht, C2D_WithColor, 274.0f, hy, 0.55f, 0.38f, 0.38f,
                      (i == 0) ? theme::INK : theme::INK_MUTED);
         hy += 17.0f;
     }
