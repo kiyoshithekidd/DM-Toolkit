@@ -72,6 +72,9 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 
 ## Changelog
 
+* **v1.5.1:**
+  * **True 3D Tumbling Dice & Face-Bound Numerals:** Replaced 2D pinwheel rotation with full 3D quaternion-rotated polyhedral meshes (`d4`–`d100`) using `DiceRoller` physics, with back-face culling, directional facet lighting, 3D-projected `d6` pips, and perspective-foreshortened numerals stamped directly onto each visible die face.
+  * **Realistic Dice Roll Audio (`SFX_DICE_ROLL`):** Replaced the 5-hit skittering burst with organic, irregular resin/wood clacks and an initial felt-tray thump.
 * **v1.5.0:**
   * **Smart Monster Action & Damage Roller (#28):** Cycle monster actions (`<` / `>`) and roll `Hit` (`1d20 + atk`) or parsed `Dmg` (`NdX + mod`) straight into the Dice Tray.
   * **Combat Tracker QoL (#29):** Added `Conc` toggle with automatic `DC = max(10, dmg / 2)` concentration prompts, Hero Death Save tracker (`+Succ`, `+Fail`, `Stabilize`), `Skip Dead` auto-skip toggle, and removed overlapping target arrows.

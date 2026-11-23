@@ -50,24 +50,39 @@ void synthAllClips() {
         g_clips[SFX_TAP].samples[i] = static_cast<int16_t>(s * env * 12000.0f);
     }
 
-    // 2. Wooden dice clatter bursts (320 ms)
-    allocClip(SFX_DICE_ROLL, static_cast<uint32_t>(kSampleRate * 0.32f));
-    const float hitTimes[5] = {0.01f, 0.07f, 0.14f, 0.21f, 0.27f};
-    const float hitAmp[5]   = {1.0f,  0.80f, 0.62f, 0.42f, 0.25f};
+    // 2. Realistic tumbling dice clacks on a felt-lined wooden tray (580 ms)
+    allocClip(SFX_DICE_ROLL, static_cast<uint32_t>(kSampleRate * 0.58f));
+    const float hitTimes[10] = {0.005f, 0.042f, 0.088f, 0.125f, 0.178f, 0.235f, 0.298f, 0.365f, 0.440f, 0.515f};
+    const float hitAmp[10]   = {0.85f,  0.95f,  0.78f,  0.88f,  0.66f,  0.54f,  0.42f,  0.30f,  0.20f,  0.12f};
+    const float hitPitch[10] = {1.00f,  0.88f,  1.08f,  0.93f,  1.05f,  0.86f,  0.97f,  0.90f,  0.84f,  0.80f};
     for (uint32_t i = 0; i < g_clips[SFX_DICE_ROLL].count; ++i) {
         float t = static_cast<float>(i) / kSampleRate;
         float sum = 0.0f;
         float noise = (static_cast<float>(sfxRand(rng) & 0xFFFFu) / 32768.0f) - 1.0f;
-        for (int h = 0; h < 5; ++h) {
+
+        // Subtle low felt/wood tray thump on initial drop
+        if (t < 0.08f) {
+            float thumpEnv = std::exp(-55.0f * t);
+            sum += std::sin(twoPi * 135.0f * t) * thumpEnv * 0.45f;
+        }
+
+        for (int h = 0; h < 10; ++h) {
             if (t >= hitTimes[h]) {
                 float dt = t - hitTimes[h];
-                float env = std::exp(-80.0f * dt) * hitAmp[h];
-                float knock = std::sin(twoPi * (360.0f + h * 55.0f) * dt) * 0.55f + noise * 0.45f;
-                sum += knock * env;
+                if (dt < 0.045f) {
+                    float f0 = 520.0f * hitPitch[h];
+                    float f1 = 1280.0f * hitPitch[h];
+                    float bodyEnv  = std::exp(-160.0f * dt);
+                    float clickEnv = std::exp(-520.0f * dt);
+                    float clack = (std::sin(twoPi * f0 * dt) * 0.50f +
+                                   std::sin(twoPi * f1 * dt) * 0.25f) * bodyEnv +
+                                  noise * 0.35f * clickEnv;
+                    sum += clack * hitAmp[h];
+                }
             }
         }
         float clamped = (sum > 1.0f) ? 1.0f : ((sum < -1.0f) ? -1.0f : sum);
-        g_clips[SFX_DICE_ROLL].samples[i] = static_cast<int16_t>(clamped * 15000.0f);
+        g_clips[SFX_DICE_ROLL].samples[i] = static_cast<int16_t>(clamped * 15500.0f);
     }
 
     // 3. Natural 20 celebratory golden chime (420 ms)

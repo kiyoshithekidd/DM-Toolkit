@@ -5,40 +5,226 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace dmtk {
 
 namespace {
 
-static size_t spriteIndexForShape(DieShape shape) {
+static uint32_t lerpSkinColor(const DiceSkinPalette& skin, float light, float mult) {
+    // light in [0, 1]: 0..0.5 blends lo->mid, 0.5..1.0 blends mid->hi
+    float r, g, b;
+    if (light < 0.5f) {
+        float t = light * 2.0f;
+        r = skin.loR + (skin.midR - skin.loR) * t;
+        g = skin.loG + (skin.midG - skin.loG) * t;
+        b = skin.loB + (skin.midB - skin.loB) * t;
+    } else {
+        float t = (light - 0.5f) * 2.0f;
+        r = skin.midR + (skin.hiR - skin.midR) * t;
+        g = skin.midG + (skin.hiG - skin.midG) * t;
+        b = skin.midB + (skin.hiB - skin.midB) * t;
+    }
+    uint8_t rb = static_cast<uint8_t>(std::clamp(r * mult, 0.0f, 255.0f));
+    uint8_t gb = static_cast<uint8_t>(std::clamp(g * mult, 0.0f, 255.0f));
+    uint8_t bb = static_cast<uint8_t>(std::clamp(b * mult, 0.0f, 255.0f));
+    return rgba32(rb, gb, bb, 255);
+}
+
+struct Face3D {
+    std::vector<Vec3> verts;
+    Vec3              normal;
+    int               value = 1;
+};
+
+static Vec3 norm3(float x, float y, float z) {
+    float len = std::sqrt(x * x + y * y + z * z);
+    if (len < 1e-6f) return {0.0f, 0.0f, 1.0f};
+    return {x / len, y / len, z / len};
+}
+
+static float dot3(const Vec3& a, const Vec3& b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+static Vec3 cross3(const Vec3& a, const Vec3& b) {
+    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+
+static void buildPolyFaces(DieShape shape, std::vector<Face3D>& outFaces) {
+    outFaces.clear();
     switch (shape) {
-        case DIE_D4:   return 6;
-        case DIE_D6:   return 7;
-        case DIE_D8:   return 8;
+        case DIE_D4: {
+            const Vec3 v[4] = {
+                norm3(-1, -1, -1), norm3( 1,  1, -1), norm3( 1, -1,  1), norm3(-1,  1,  1)
+            };
+            const int idx[4][3] = {{1,2,3}, {0,2,3}, {0,1,3}, {0,1,2}};
+            std::vector<Vec3> norms;
+            DiceRoller::getFaceNormals(DIE_D4, norms);
+            for (int f = 0; f < 4; ++f) {
+                Face3D face;
+                face.normal = norms[static_cast<size_t>(f)];
+                face.value  = f + 1;
+                face.verts  = {v[idx[f][0]], v[idx[f][1]], v[idx[f][2]]};
+                outFaces.push_back(std::move(face));
+            }
+            break;
+        }
+        case DIE_D6: {
+            const float s = 0.72f;
+            const Vec3 v[8] = {
+                {-s,-s, s}, { s,-s, s}, { s, s, s}, {-s, s, s}, // 0..3 front (+z)
+                {-s,-s,-s}, { s,-s,-s}, { s, s,-s}, {-s, s,-s}  // 4..7 back  (-z)
+            };
+            const int idx[6][4] = {
+                {0,1,2,3}, // +z (1)
+                {5,4,7,6}, // -z (2)
+                {3,2,6,7}, // +y (3)
+                {4,5,1,0}, // -y (4)
+                {1,5,6,2}, // +x (5)
+                {4,0,3,7}  // -x (6)
+            };
+            std::vector<Vec3> norms;
+            DiceRoller::getFaceNormals(DIE_D6, norms);
+            for (int f = 0; f < 6; ++f) {
+                Face3D face;
+                face.normal = norms[static_cast<size_t>(f)];
+                face.value  = f + 1;
+                face.verts  = {v[idx[f][0]], v[idx[f][1]], v[idx[f][2]], v[idx[f][3]]};
+                outFaces.push_back(std::move(face));
+            }
+            break;
+        }
+        case DIE_D8: {
+            const Vec3 v[6] = {
+                { 1, 0, 0}, {-1, 0, 0}, {0,  1, 0}, {0, -1, 0}, {0, 0,  1}, {0, 0, -1}
+            };
+            const int idx[8][3] = {
+                {0,2,4}, {1,2,4}, {0,3,4}, {1,3,4},
+                {0,2,5}, {1,2,5}, {0,3,5}, {1,3,5}
+            };
+            std::vector<Vec3> norms;
+            DiceRoller::getFaceNormals(DIE_D8, norms);
+            for (int f = 0; f < 8; ++f) {
+                Face3D face;
+                face.normal = norms[static_cast<size_t>(f)];
+                face.value  = f + 1;
+                face.verts  = {v[idx[f][0]], v[idx[f][1]], v[idx[f][2]]};
+                outFaces.push_back(std::move(face));
+            }
+            break;
+        }
         case DIE_D10:
-        case DIE_D100: return 9;
-        case DIE_D12:  return 10;
+        case DIE_D100: {
+            std::vector<Vec3> norms;
+            DiceRoller::getFaceNormals(DIE_D10, norms);
+            for (int f = 0; f < 10; ++f) {
+                const Vec3& n = norms[static_cast<size_t>(f)];
+                Vec3 up = (std::fabs(n.z) < 0.9f) ? Vec3{0, 0, 1} : Vec3{1, 0, 0};
+                Vec3 u = norm3(cross3(up, n).x, cross3(up, n).y, cross3(up, n).z);
+                Vec3 v = cross3(n, u);
+                Vec3 c = {n.x * 0.76f, n.y * 0.76f, n.z * 0.76f};
+                Face3D face;
+                face.normal = n;
+                face.value  = (shape == DIE_D100) ? ((f % 10) * 10) : (f + 1);
+                // Kite vertices around face center c
+                face.verts = {
+                    {c.x + v.x * 0.62f, c.y + v.y * 0.62f, c.z + v.z * 0.62f},
+                    {c.x + u.x * 0.48f - v.x * 0.08f, c.y + u.y * 0.48f - v.y * 0.08f, c.z + u.z * 0.48f - v.z * 0.08f},
+                    {c.x - v.x * 0.56f, c.y - v.y * 0.56f, c.z - v.z * 0.56f},
+                    {c.x - u.x * 0.48f - v.x * 0.08f, c.y - u.y * 0.48f - v.y * 0.08f, c.z - u.z * 0.48f - v.z * 0.08f}
+                };
+                outFaces.push_back(std::move(face));
+            }
+            break;
+        }
+        case DIE_D12: {
+            std::vector<Vec3> norms;
+            DiceRoller::getFaceNormals(DIE_D12, norms);
+            for (int f = 0; f < 12; ++f) {
+                const Vec3& n = norms[static_cast<size_t>(f)];
+                // Collect 5 adjacent face normals (dot > 0.35)
+                std::vector<Vec3> adj;
+                for (int j = 0; j < 12; ++j) {
+                    if (j != f && dot3(n, norms[static_cast<size_t>(j)]) > 0.35f) {
+                        adj.push_back(norms[static_cast<size_t>(j)]);
+                    }
+                }
+                Vec3 up = (std::fabs(n.z) < 0.9f) ? Vec3{0, 0, 1} : Vec3{1, 0, 0};
+                Vec3 u = cross3(up, n);
+                u = norm3(u.x, u.y, u.z);
+                Vec3 v = cross3(n, u);
+                std::sort(adj.begin(), adj.end(), [&](const Vec3& a, const Vec3& b) {
+                    return std::atan2(dot3(a, v), dot3(a, u)) < std::atan2(dot3(b, v), dot3(b, u));
+                });
+                Face3D face;
+                face.normal = n;
+                face.value  = f + 1;
+                for (size_t k = 0; k < adj.size(); ++k) {
+                    const Vec3& na = adj[k];
+                    const Vec3& nb = adj[(k + 1) % adj.size()];
+                    Vec3 vt = norm3(n.x + na.x + nb.x, n.y + na.y + nb.y, n.z + na.z + nb.z);
+                    face.verts.push_back({vt.x * 0.98f, vt.y * 0.98f, vt.z * 0.98f});
+                }
+                outFaces.push_back(std::move(face));
+            }
+            break;
+        }
         case DIE_D20:
-        default:       return 11;
+        default: {
+            const float phi = 1.61803398875f;
+            const Vec3 v[12] = {
+                norm3(-1,  phi, 0), norm3( 1,  phi, 0), norm3(-1, -phi, 0), norm3( 1, -phi, 0),
+                norm3( 0, -1,  phi), norm3( 0,  1,  phi), norm3( 0, -1, -phi), norm3( 0,  1, -phi),
+                norm3( phi, 0, -1), norm3( phi, 0,  1), norm3(-phi, 0, -1), norm3(-phi, 0,  1)
+            };
+            const int faces[20][3] = {
+                {0,11,5},{0,5,1},{0,1,7},{0,7,10},{0,10,11},
+                {1,5,9},{5,11,4},{11,10,2},{10,7,6},{7,1,8},
+                {3,9,4},{3,4,2},{3,2,6},{3,6,8},{3,8,9},
+                {4,9,5},{2,4,11},{6,2,10},{8,6,7},{9,8,1}
+            };
+            std::vector<Vec3> norms;
+            DiceRoller::getFaceNormals(DIE_D20, norms);
+            for (int f = 0; f < 20; ++f) {
+                Face3D face;
+                face.normal = norms[static_cast<size_t>(f)];
+                face.value  = f + 1;
+                face.verts  = {v[faces[f][0]], v[faces[f][1]], v[faces[f][2]]};
+                outFaces.push_back(std::move(face));
+            }
+            break;
+        }
     }
 }
 
-static uint32_t scaleSkinColor(uint8_t r0, uint8_t g0, uint8_t b0, float mult) {
-    uint8_t r = static_cast<uint8_t>(std::clamp(r0 * mult, 0.0f, 255.0f));
-    uint8_t g = static_cast<uint8_t>(std::clamp(g0 * mult, 0.0f, 255.0f));
-    uint8_t b = static_cast<uint8_t>(std::clamp(b0 * mult, 0.0f, 255.0f));
-    return rgba32(r, g, b, 255);
+static const std::vector<Face3D>& cachedFacesForShape(DieShape shape) {
+    static std::vector<Face3D> s_cache[DIE_SHAPE_COUNT];
+    static bool s_init[DIE_SHAPE_COUNT] = {};
+    int idx = static_cast<int>(shape);
+    if (idx < 0 || idx >= DIE_SHAPE_COUNT) idx = DIE_D20;
+    if (!s_init[idx]) {
+        buildPolyFaces(static_cast<DieShape>(idx), s_cache[idx]);
+        s_init[idx] = true;
+    }
+    return s_cache[idx];
 }
 
-static void drawD6Pips(float cx, float cy, float r, int val, uint32_t pipCol, float angle) {
-    float d = r * 0.44f;
-    float pr = std::max(2.2f, r * 0.14f);
-    float ca = std::cos(angle), sa = std::sin(angle);
+static void drawD6Pips3D(float sx, float sy, float R, float zBase,
+                         const Vec3& fc, const Vec3& u, const Vec3& v,
+                         int val, uint32_t pipCol) {
+    const float d = 0.40f;
+    const float pr = std::max(2.0f, R * 0.12f);
     auto pip = [&](float ox, float oy) {
-        float rx = cx + ox * ca - oy * sa;
-        float ry = cy + ox * sa + oy * ca;
-        C2D_DrawCircleSolid(rx + 0.8f, ry + 0.8f, 0.62f, pr, rgba32(0, 0, 0, 120));
-        C2D_DrawCircleSolid(rx, ry, 0.65f, pr, pipCol);
+        Vec3 p = {
+            fc.x + u.x * ox + v.x * oy,
+            fc.y + u.y * ox + v.y * oy,
+            fc.z + u.z * ox + v.z * oy
+        };
+        float px = sx + p.x * R;
+        float py = sy - p.y * R;
+        C2D_DrawCircleSolid(px + 0.7f, py + 0.7f, zBase + 0.01f, pr, rgba32(0, 0, 0, 140));
+        C2D_DrawCircleSolid(px, py, zBase + 0.02f, pr, pipCol);
     };
     if (val == 1 || val == 3 || val == 5) pip(0, 0);
     if (val >= 2) { pip(-d, -d); pip(d, d); }
@@ -46,40 +232,14 @@ static void drawD6Pips(float cx, float cy, float r, int val, uint32_t pipCol, fl
     if (val == 6) { pip(-d, 0); pip(d, 0); }
 }
 
-static void drawPolyNgon(float cx, float cy, float z, float r, int sides, float angle,
-                         uint32_t hiCol, uint32_t midCol, uint32_t loCol, uint32_t edgeCol) {
-    // Outer edge silhouette
-    for (int i = 0; i < sides; ++i) {
-        float a0 = angle + (static_cast<float>(i) * 2.0f * 3.1415926f) / sides - 1.5707963f;
-        float a1 = angle + (static_cast<float>(i + 1) * 2.0f * 3.1415926f) / sides - 1.5707963f;
-        float x0 = cx + std::cos(a0) * (r + 1.5f), y0 = cy + std::sin(a0) * (r + 1.5f);
-        float x1 = cx + std::cos(a1) * (r + 1.5f), y1 = cy + std::sin(a1) * (r + 1.5f);
-        C2D_DrawTriangle(cx, cy, edgeCol, x0, y0, edgeCol, x1, y1, edgeCol, z - 0.02f);
-    }
-    // Outer shaded facets
-    for (int i = 0; i < sides; ++i) {
-        float a0 = angle + (static_cast<float>(i) * 2.0f * 3.1415926f) / sides - 1.5707963f;
-        float a1 = angle + (static_cast<float>(i + 1) * 2.0f * 3.1415926f) / sides - 1.5707963f;
-        float midA = (a0 + a1) * 0.5f;
-        // Top-left lit, bottom-right shaded
-        float light = -std::cos(midA) * 0.45f - std::sin(midA) * 0.85f;
-        uint32_t fcol = (light > 0.25f) ? hiCol : (light < -0.20f ? loCol : midCol);
-        float x0 = cx + std::cos(a0) * r, y0 = cy + std::sin(a0) * r;
-        float x1 = cx + std::cos(a1) * r, y1 = cy + std::sin(a1) * r;
-        C2D_DrawTriangle(cx, cy, fcol, x0, y0, fcol, x1, y1, fcol, z);
-        C2D_DrawLine(cx, cy, edgeCol, x0, y0, edgeCol, 1.0f, z + 0.02f);
-        C2D_DrawLine(x0, y0, edgeCol, x1, y1, edgeCol, 1.2f, z + 0.02f);
-    }
-}
-
-static void drawDieSprite(C2D_TextBuf buf, C2D_SpriteSheet /*sheet*/, const DieBody& die, int idx,
+static void drawDieSprite(C2D_TextBuf buf, C2D_SpriteSheet /*sheet*/, const DieBody& die, int /*idx*/,
                           const DiceSkinPalette& skin, float sx, float sy,
                           float targetDiameter, bool dimmed) {
     if (!die.active) return;
 
     float heightScale = die.settled ? 1.0f : (1.0f + die.pos.z * 0.28f);
     float drawDiam = targetDiameter * heightScale;
-    float R = drawDiam * 0.46f;
+    float R = drawDiam * 0.48f;
 
     // Soft drop shadow on felt underneath the die
     float shadowOff = die.settled ? 4.0f : (5.0f + die.pos.z * 12.0f);
@@ -89,134 +249,109 @@ static void drawDieSprite(C2D_TextBuf buf, C2D_SpriteSheet /*sheet*/, const DieB
                          0.25f, shadowRad * 2.0f, shadowRad * 1.7f,
                          rgba32(0, 0, 0, 110));
 
-    float angle = 0.0f;
-    if (!die.settled) {
-        angle = static_cast<float>(die.framesRolling) * 0.28f + static_cast<float>(idx) * 0.9f;
-    } else {
-        // Subtle natural resting angle per die
-        angle = ((idx % 2 == 0) ? 0.05f : -0.05f);
-    }
-
     float mult = dimmed ? 0.50f : 1.0f;
-    uint32_t hiCol   = scaleSkinColor(skin.hiR,  skin.hiG,  skin.hiB,  mult);
-    uint32_t midCol  = scaleSkinColor(skin.midR, skin.midG, skin.midB, mult);
-    uint32_t loCol   = scaleSkinColor(skin.loR,  skin.loG,  skin.loB,  mult);
     uint32_t edgeCol = dimmed ? rgba32(30, 24, 20, 255) : skin.edgeColor;
 
-    const float z = 0.45f;
-    if (die.shape == DIE_D4) {
-        drawPolyNgon(sx, sy + R * 0.12f, z, R * 1.05f, 3, angle, hiCol, midCol, loCol, edgeCol);
-    } else if (die.shape == DIE_D6) {
-        float hs = R * 0.84f;
-        float ca = std::cos(angle), sa = std::sin(angle);
-        auto rotPt = [&](float lx, float ly, float& ox, float& oy) {
-            ox = sx + lx * ca - ly * sa;
-            oy = sy + lx * sa + ly * ca;
-        };
-        float x0, y0, x1, y1, x2, y2, x3, y3;
-        float bx0, by0, bx1, by1, bx2, by2, bx3, by3;
-        rotPt(-hs, -hs, x0, y0); rotPt(hs, -hs, x1, y1);
-        rotPt(hs, hs, x2, y2);   rotPt(-hs, hs, x3, y3);
-        float b = hs + 2.0f;
-        rotPt(-b, -b, bx0, by0); rotPt(b, -b, bx1, by1);
-        rotPt(b, b, bx2, by2);   rotPt(-b, b, bx3, by3);
-        C2D_DrawTriangle(bx0, by0, edgeCol, bx1, by1, edgeCol, bx2, by2, edgeCol, z - 0.02f);
-        C2D_DrawTriangle(bx0, by0, edgeCol, bx2, by2, edgeCol, bx3, by3, edgeCol, z - 0.02f);
-        C2D_DrawTriangle(x0, y0, hiCol, x1, y1, midCol, x2, y2, loCol, z);
-        C2D_DrawTriangle(x0, y0, hiCol, x2, y2, loCol, x3, y3, midCol, z);
-        float in = hs * 0.78f;
-        float ix0, iy0, ix1, iy1, ix2, iy2, ix3, iy3;
-        rotPt(-in, -in, ix0, iy0); rotPt(in, -in, ix1, iy1);
-        rotPt(in, in, ix2, iy2);   rotPt(-in, in, ix3, iy3);
-        C2D_DrawTriangle(ix0, iy0, midCol, ix1, iy1, midCol, ix2, iy2, midCol, z + 0.02f);
-        C2D_DrawTriangle(ix0, iy0, midCol, ix2, iy2, midCol, ix3, iy3, midCol, z + 0.02f);
-        C2D_DrawLine(ix0, iy0, edgeCol, ix1, iy1, edgeCol, 1.0f, z + 0.03f);
-        C2D_DrawLine(ix1, iy1, edgeCol, ix2, iy2, edgeCol, 1.0f, z + 0.03f);
-        C2D_DrawLine(ix2, iy2, edgeCol, ix3, iy3, edgeCol, 1.0f, z + 0.03f);
-        C2D_DrawLine(ix3, iy3, edgeCol, ix0, iy0, edgeCol, 1.0f, z + 0.03f);
-    } else if (die.shape == DIE_D8) {
-        drawPolyNgon(sx, sy, z, R, 4, angle, hiCol, midCol, loCol, edgeCol);
-        drawPolyNgon(sx, sy, z + 0.04f, R * 0.56f, 4, angle + 0.7854f, hiCol, hiCol, midCol, edgeCol);
-    } else if (die.shape == DIE_D10 || die.shape == DIE_D100) {
-        // Classic d10 kite with 4 outer facets and central kite face
-        float ca = std::cos(angle), sa = std::sin(angle);
-        auto rotPt = [&](float lx, float ly, float& ox, float& oy) {
-            ox = sx + lx * ca - ly * sa;
-            oy = sy + lx * sa + ly * ca;
-        };
-        float tx, ty, rx, ry, bx, by, lx, ly;
-        rotPt(0.0f, -R, tx, ty);
-        rotPt(R * 0.88f, -R * 0.08f, rx, ry);
-        rotPt(0.0f, R, bx, by);
-        rotPt(-R * 0.88f, -R * 0.08f, lx, ly);
-        C2D_DrawTriangle(sx, sy, hiCol, lx, ly, hiCol, tx, ty, hiCol, z);
-        C2D_DrawTriangle(sx, sy, midCol, tx, ty, midCol, rx, ry, midCol, z);
-        C2D_DrawTriangle(sx, sy, loCol, rx, ry, loCol, bx, by, loCol, z);
-        C2D_DrawTriangle(sx, sy, midCol, bx, by, midCol, lx, ly, midCol, z);
-        C2D_DrawLine(tx, ty, edgeCol, rx, ry, edgeCol, 1.4f, z + 0.03f);
-        C2D_DrawLine(rx, ry, edgeCol, bx, by, edgeCol, 1.4f, z + 0.03f);
-        C2D_DrawLine(bx, by, edgeCol, lx, ly, edgeCol, 1.4f, z + 0.03f);
-        C2D_DrawLine(lx, ly, edgeCol, tx, ty, edgeCol, 1.4f, z + 0.03f);
-        // Inner kite face
-        float itx, ity, irx, iry, ibx, iby, ilx, ily;
-        rotPt(0.0f, -R * 0.54f, itx, ity);
-        rotPt(R * 0.46f, -R * 0.05f, irx, iry);
-        rotPt(0.0f, R * 0.54f, ibx, iby);
-        rotPt(-R * 0.46f, -R * 0.05f, ilx, ily);
-        C2D_DrawTriangle(itx, ity, hiCol, irx, iry, midCol, ibx, iby, midCol, z + 0.04f);
-        C2D_DrawTriangle(itx, ity, hiCol, ibx, iby, midCol, ilx, ily, hiCol, z + 0.04f);
-        C2D_DrawLine(itx, ity, edgeCol, irx, iry, edgeCol, 1.0f, z + 0.05f);
-        C2D_DrawLine(irx, iry, edgeCol, ibx, iby, edgeCol, 1.0f, z + 0.05f);
-        C2D_DrawLine(ibx, iby, edgeCol, ilx, ily, edgeCol, 1.0f, z + 0.05f);
-        C2D_DrawLine(ilx, ily, edgeCol, itx, ity, edgeCol, 1.0f, z + 0.05f);
-    } else if (die.shape == DIE_D12) {
-        drawPolyNgon(sx, sy, z, R, 5, angle, hiCol, midCol, loCol, edgeCol);
-        drawPolyNgon(sx, sy, z + 0.04f, R * 0.58f, 5, angle + 3.14159f, hiCol, hiCol, midCol, edgeCol);
-    } else {
-        // DIE_D20: Hexagon outer icosahedron + central lit equilateral triangle face
-        drawPolyNgon(sx, sy, z, R, 6, angle, hiCol, midCol, loCol, edgeCol);
-        drawPolyNgon(sx, sy, z + 0.04f, R * 0.58f, 3, angle, hiCol, hiCol, midCol, edgeCol);
+    const auto& mesh = cachedFacesForShape(die.shape);
+
+    struct DrawableFace {
+        const Face3D*     face;
+        Vec3              wn;
+        Vec3              center3D;
+        std::vector<Vec3> wVerts;
+    };
+    std::vector<DrawableFace> visible;
+    visible.reserve(mesh.size());
+
+    for (const auto& f : mesh) {
+        Vec3 wn = DiceRoller::rotateVec(die.rot, f.normal);
+        if (wn.z <= 0.02f) continue; // back-face cull
+        DrawableFace df;
+        df.face = &f;
+        df.wn   = wn;
+        Vec3 sum{0, 0, 0};
+        df.wVerts.reserve(f.verts.size());
+        for (const auto& lv : f.verts) {
+            Vec3 wv = DiceRoller::rotateVec(die.rot, lv);
+            df.wVerts.push_back(wv);
+            sum.x += wv.x; sum.y += wv.y; sum.z += wv.z;
+        }
+        float invN = 1.0f / static_cast<float>(f.verts.size());
+        df.center3D = {sum.x * invN, sum.y * invN, sum.z * invN};
+        visible.push_back(std::move(df));
     }
 
-    // Determine displayed number / pip value
-    int shownVal = die.settled
-        ? die.result
-        : (((die.framesRolling * 3 + die.result + idx) % std::max(1, die.sides)) + 1);
-    if (die.shape == DIE_D100 && !die.settled) {
-        shownVal = ((die.framesRolling * 3 + idx) % 10) * 10;
-    }
+    // Painter's sort back-to-front
+    std::sort(visible.begin(), visible.end(), [](const DrawableFace& a, const DrawableFace& b) {
+        return a.center3D.z < b.center3D.z;
+    });
 
-    if (die.shape == DIE_D6 && shownVal >= 1 && shownVal <= 6 && die.settled) {
-        uint32_t pipCol = dimmed ? theme::INK_MUTED : skin.numColor;
-        if (shownVal == 6 && !dimmed) pipCol = theme::GOLD_BRIGHT;
-        else if (shownVal == 1 && !dimmed) pipCol = theme::CRIMSON;
-        drawD6Pips(sx, sy, R * 0.85f, shownVal, pipCol, angle);
-    } else {
-        char numStr[8];
-        if (die.shape == DIE_D100) {
-            std::snprintf(numStr, sizeof(numStr), "%02d", shownVal);
-        } else {
-            std::snprintf(numStr, sizeof(numStr), "%d", shownVal);
+    for (size_t fi = 0; fi < visible.size(); ++fi) {
+        const DrawableFace& df = visible[fi];
+        float light = std::clamp(df.wn.x * -0.35f + df.wn.y * 0.45f + df.wn.z * 0.72f, 0.0f, 1.0f);
+        uint32_t fcol = lerpSkinColor(skin, light, mult);
+        float fz = 0.40f + static_cast<float>(fi) * 0.008f;
+
+        // Project vertices to 2D
+        float px[8], py[8];
+        size_t nv = std::min<size_t>(df.wVerts.size(), 8);
+        for (size_t k = 0; k < nv; ++k) {
+            px[k] = sx + df.wVerts[k].x * R;
+            py[k] = sy - df.wVerts[k].y * R;
+        }
+        for (size_t k = 1; k + 1 < nv; ++k) {
+            C2D_DrawTriangle(px[0], py[0], fcol, px[k], py[k], fcol, px[k + 1], py[k + 1], fcol, fz);
+        }
+        for (size_t k = 0; k < nv; ++k) {
+            size_t nxt = (k + 1) % nv;
+            C2D_DrawLine(px[k], py[k], edgeCol, px[nxt], py[nxt], edgeCol, 1.25f, fz + 0.002f);
         }
 
-        C2D_Text txt;
-        C2D_TextParse(&txt, buf, numStr);
-        C2D_TextOptimize(&txt);
-        float sc = (drawDiam >= 64.0f) ? 0.68f : (drawDiam >= 48.0f ? 0.54f : 0.44f);
-        float tw = 0.0f, th = 0.0f;
-        C2D_TextGetDimensions(&txt, sc, sc, &tw, &th);
-        uint32_t ncol = dimmed ? theme::INK_MUTED : skin.numColor;
-        if (die.settled && shownVal == die.sides && !dimmed && die.shape != DIE_D100) {
-            ncol = theme::GOLD_BRIGHT;
-        } else if (die.settled && shownVal == 1 && !dimmed && die.shape != DIE_D100) {
-            ncol = theme::CRIMSON;
+        // Draw numeral / pips directly ON the 3D face when facing the viewer
+        if (df.wn.z > 0.46f) {
+            int val = df.face->value;
+            if (die.settled && fi + 1 == visible.size()) {
+                val = die.result; // Guarantee exact winning result on top settled face
+            }
+            if (die.shape == DIE_D6 && val >= 1 && val <= 6) {
+                uint32_t pipCol = dimmed ? theme::INK_MUTED : skin.numColor;
+                if (die.settled && fi + 1 == visible.size() && !dimmed) {
+                    if (val == 6) pipCol = theme::GOLD_BRIGHT;
+                    else if (val == 1) pipCol = theme::CRIMSON;
+                }
+                Vec3 u = norm3(df.wVerts[1].x - df.wVerts[0].x, df.wVerts[1].y - df.wVerts[0].y, df.wVerts[1].z - df.wVerts[0].z);
+                Vec3 v = norm3(df.wVerts[3].x - df.wVerts[0].x, df.wVerts[3].y - df.wVerts[0].y, df.wVerts[3].z - df.wVerts[0].z);
+                drawD6Pips3D(sx, sy, R, fz + 0.004f, df.center3D, u, v, val, pipCol);
+            } else {
+                char numStr[8];
+                if (die.shape == DIE_D100) std::snprintf(numStr, sizeof(numStr), "%02d", val);
+                else std::snprintf(numStr, sizeof(numStr), "%d", val);
+
+                C2D_Text txt;
+                C2D_TextParse(&txt, buf, numStr);
+                C2D_TextOptimize(&txt);
+
+                float baseSc = (drawDiam >= 64.0f) ? 0.62f : (drawDiam >= 48.0f ? 0.50f : 0.42f);
+                // Foreshorten numeral along the face's 3D tilt so it stays glued to the face
+                float scX = baseSc * std::max(0.28f, 1.0f - std::fabs(df.wn.x) * 0.70f);
+                float scY = baseSc * std::max(0.28f, 1.0f - std::fabs(df.wn.y) * 0.70f);
+                float tw = 0.0f, th = 0.0f;
+                C2D_TextGetDimensions(&txt, scX, scY, &tw, &th);
+
+                uint32_t ncol = dimmed ? theme::INK_MUTED : skin.numColor;
+                if (die.settled && fi + 1 == visible.size() && !dimmed && die.shape != DIE_D100) {
+                    if (val == die.sides) ncol = theme::GOLD_BRIGHT;
+                    else if (val == 1)    ncol = theme::CRIMSON;
+                }
+
+                float fcx = sx + df.center3D.x * R;
+                float fcy = sy - df.center3D.y * R;
+                float tx = fcx - tw * 0.5f;
+                float ty = fcy - th * 0.5f;
+                C2D_DrawText(&txt, C2D_WithColor, tx + 0.8f, ty + 0.8f, fz + 0.003f, scX, scY, rgba32(0, 0, 0, 185));
+                C2D_DrawText(&txt, C2D_WithColor, tx, ty, fz + 0.005f, scX, scY, ncol);
+            }
         }
-        float yOff = (die.shape == DIE_D4 || die.shape == DIE_D20) ? (drawDiam * 0.06f) : 0.0f;
-        float tx = sx - tw * 0.5f;
-        float ty = sy - th * 0.5f + yOff;
-        // Engraved shadow beneath numeral so it sits on the top facet
-        C2D_DrawText(&txt, C2D_WithColor, tx + 1.0f, ty + 1.0f, 0.62f, sc, sc, rgba32(0, 0, 0, 185));
-        C2D_DrawText(&txt, C2D_WithColor, tx, ty, 0.65f, sc, sc, ncol);
     }
 }
 
