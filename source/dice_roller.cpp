@@ -258,6 +258,83 @@ void DiceRoller::rollPool(DieShape shape, int count, int modifier, RollAdvantage
     }
 }
 
+DiceExpr DiceRoller::parseDiceExpr(const char* text) {
+    DiceExpr out;
+    if (!text) return out;
+
+    const char* p = text;
+    while (*p) {
+        if (*p >= '0' && *p <= '9') {
+            int count = 0;
+            const char* q = p;
+            while (*q >= '0' && *q <= '9' && count < 100) {
+                count = count * 10 + (*q - '0');
+                ++q;
+            }
+            if ((*q == 'd' || *q == 'D') && q[1] >= '0' && q[1] <= '9') {
+                ++q;
+                int sides = 0;
+                while (*q >= '0' && *q <= '9' && sides < 1000) {
+                    sides = sides * 10 + (*q - '0');
+                    ++q;
+                }
+                DieShape sh = DIE_D6;
+                bool known = true;
+                switch (sides) {
+                    case 4:   sh = DIE_D4; break;
+                    case 6:   sh = DIE_D6; break;
+                    case 8:   sh = DIE_D8; break;
+                    case 10:  sh = DIE_D10; break;
+                    case 12:  sh = DIE_D12; break;
+                    case 20:  sh = DIE_D20; break;
+                    case 100: sh = DIE_D100; break;
+                    default:  known = false; break;
+                }
+                if (known && count >= 1 && count <= 30) {
+                    int mod = 0;
+                    const char* m = q;
+                    while (*m == ' ') ++m;
+                    if (*m == '+' || *m == '-') {
+                        int sign = (*m == '-') ? -1 : 1;
+                        ++m;
+                        while (*m == ' ') ++m;
+                        if (*m >= '0' && *m <= '9') {
+                            int val = 0;
+                            while (*m >= '0' && *m <= '9' && val < 1000) {
+                                val = val * 10 + (*m - '0');
+                                ++m;
+                            }
+                            mod = sign * val;
+                        }
+                    }
+                    out.valid = true;
+                    out.count = count;
+                    out.sides = sides;
+                    out.mod   = mod;
+                    out.shape = sh;
+                    return out;
+                }
+            }
+        }
+        ++p;
+    }
+    return out;
+}
+
+void DiceRoller::applyImpulse(float vx, float vy) {
+    float mag = std::sqrt(vx * vx + vy * vy);
+    for (int i = 0; i < activeCount_; ++i) {
+        DieBody& d = dice_[static_cast<size_t>(i)];
+        if (!d.active) continue;
+        d.vel.x += vx;
+        d.vel.y += vy;
+        d.vel.z = std::max(d.vel.z, 1.2f + std::min(mag * 0.4f, 2.0f));
+        d.angVel.x += vy * 2.5f;
+        d.angVel.y -= vx * 2.5f;
+        d.settled = false;
+    }
+}
+
 void DiceRoller::stepDie(DieBody& d, float dt) {
     if (!d.active || d.settled) return;
     ++d.framesRolling;

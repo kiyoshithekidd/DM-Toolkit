@@ -7,10 +7,12 @@
 namespace dmtk {
 
 struct UserSettings {
-    int         diceSkinIdx  = 0;
-    int         traySkinIdx  = 0;
-    bool        soundEnabled = true;
-    std::string lastCampaignSlug;
+    int                   diceSkinIdx  = 0;
+    int                   traySkinIdx  = 0;
+    bool                  soundEnabled = true;
+    bool                  autoSkipDead = true;
+    std::string           lastCampaignSlug;
+    std::vector<uint32_t> pinnedEntries;
 };
 
 struct CampaignData {

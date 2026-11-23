@@ -33,9 +33,25 @@ struct GeneratedLoot {
     std::string              summary;
 };
 
+struct EncounterDifficultyEval {
+    uint32_t            baseXp       = 0;
+    uint32_t            adjustedXp   = 0;
+    float               multiplier   = 1.0f;
+    uint32_t            easyThresh   = 0;
+    uint32_t            mediumThresh = 0;
+    uint32_t            hardThresh   = 0;
+    uint32_t            deadlyThresh = 0;
+    EncounterDifficulty rating       = DIFF_EASY;
+};
+
 class Generators {
 public:
     static const char* difficultyToString(EncounterDifficulty diff);
+
+    static EncounterDifficultyEval evaluateEncounterDifficulty(const SrdDatabase& db,
+                                                               const SavedEncounter& enc,
+                                                               const std::vector<PartyMember>& party,
+                                                               int fallbackLevel = 1);
 
     static SavedEncounter generateEncounter(const SrdDatabase& db,
                                             int partyLevel,

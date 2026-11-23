@@ -156,6 +156,10 @@ public:
     int  reloadHomebrewDir(const char* dirPath);
     bool saveHomebrewMonster(const HomebrewMonster& mon, const char* homebrewDir);
     bool saveHomebrewSpell(const HomebrewSpell& sp, const char* homebrewDir);
+    bool deleteHomebrewMonster(size_t hbIdx, const char* homebrewDir);
+    bool deleteHomebrewSpell(size_t hbIdx, const char* homebrewDir);
+    const std::vector<HomebrewMonster>& homebrewMonsters() const { return hbMonsters_; }
+    const std::vector<HomebrewSpell>&   homebrewSpells() const { return hbSpells_; }
 
     bool isLoaded() const { return loaded_; }
     uint32_t monsterCount() const;

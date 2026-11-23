@@ -60,8 +60,9 @@ struct AppState {
     int            draftSelectedIdx = 0;
     bool           encBuilderView   = false;
 
-    // On-Device Homebrew Creator draft (Issue #9)
+    // On-Device Homebrew Creator draft (Issue #9, #33)
     bool        hbIsSpell    = false;
+    int         hbEditIdx    = -1; // -1 = new draft, >= 0 = index in on-device homebrew list
     std::string hbName       = "Shadow Hound";
     int         hbAc         = 14;
     int         hbHp         = 28;
@@ -69,6 +70,11 @@ struct AppState {
     int         hbSpellLevel = 1;
     std::string hbActionName = "Shadow Bite";
     std::string hbDesc       = "+5 to hit, 1d8+3 necrotic damage.";
+
+    // Pinned Session Favorites (#32)
+    std::vector<uint32_t> pinnedEntries;
+    bool                  manualPinnedOnly = false;
+    bool                  rulePinnedOnly   = false;
 
     // Monster Manual search & filters
     std::string            monsterQuery;
@@ -89,6 +95,7 @@ struct AppState {
 
     // Fight Tracker top-screen state
     int  trackerRightScroll    = 0;
+    int  fightActionIdx        = 0;
     bool combatRulesDrawerOpen = false;
     int  drawerRuleIndex       = 0;
 
@@ -114,6 +121,25 @@ struct AppState {
         statusFrames = frames;
     }
 
+    static uint32_t pinKey(uint8_t cat, uint16_t id) {
+        return (static_cast<uint32_t>(cat) << 16) | static_cast<uint32_t>(id);
+    }
+
+    bool isPinned(uint8_t cat, uint16_t id) const {
+        uint32_t k = pinKey(cat, id);
+        return std::find(pinnedEntries.begin(), pinnedEntries.end(), k) != pinnedEntries.end();
+    }
+
+    void togglePin(uint8_t cat, uint16_t id) {
+        uint32_t k = pinKey(cat, id);
+        auto it = std::find(pinnedEntries.begin(), pinnedEntries.end(), k);
+        if (it != pinnedEntries.end()) {
+            pinnedEntries.erase(it);
+        } else if (pinnedEntries.size() < 64) {
+            pinnedEntries.push_back(k);
+        }
+    }
+
     void addMonsterToDraft(uint16_t monsterId) {
         for (auto& s : draftEncounter.slots) {
             if (s.monsterId == monsterId) {
@@ -132,12 +158,20 @@ struct AppState {
         s.diceSkinIdx      = diceSkinIdx;
         s.traySkinIdx      = traySkinIdx;
         s.soundEnabled     = soundEnabled;
+        s.autoSkipDead     = tracker.autoSkipDead();
         s.lastCampaignSlug = campaign.slug;
+        s.pinnedEntries    = pinnedEntries;
         campaignMgr.saveSettings(s);
     }
 
     void refreshMonsterSearch() {
         db.searchMonsters(monsterQuery.c_str(), monsterTypeFilter, monsterCrFilter, monsterResults, 334);
+        if (manualPinnedOnly) {
+            monsterResults.erase(
+                std::remove_if(monsterResults.begin(), monsterResults.end(),
+                               [this](const SearchHit& h) { return !isPinned(CAT_MONSTER, h.recordId); }),
+                monsterResults.end());
+        }
         monsterListCursor = 0;
         monsterListScroll = 0;
         manualTopScroll   = 0;
@@ -145,6 +179,12 @@ struct AppState {
 
     void refreshRuleSearch() {
         db.searchReference(ruleQuery.c_str(), refTab, ruleResults, 128);
+        if (rulePinnedOnly) {
+            ruleResults.erase(
+                std::remove_if(ruleResults.begin(), ruleResults.end(),
+                               [this](const SearchHit& h) { return !isPinned(h.category, h.recordId); }),
+                ruleResults.end());
+        }
         ruleListCursor = 0;
         ruleListScroll = 0;
         ruleTopScroll  = 0;

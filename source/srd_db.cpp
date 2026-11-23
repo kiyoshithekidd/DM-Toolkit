@@ -831,4 +831,46 @@ bool SrdDatabase::saveHomebrewSpell(const HomebrewSpell& sp, const char* homebre
     return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
 }
 
+bool SrdDatabase::deleteHomebrewMonster(size_t hbIdx, const char* homebrewDir) {
+    if (hbIdx >= hbMonsters_.size() || !hbMonsters_[hbIdx].fromOnDevice) return false;
+    uint16_t deletedId = hbMonsters_[hbIdx].id;
+    hbMonsters_.erase(hbMonsters_.begin() + static_cast<ptrdiff_t>(hbIdx));
+    for (size_t i = hbIdx; i < hbMonsters_.size(); ++i) {
+        hbMonsters_[i].id = static_cast<uint16_t>(HOMEBREW_MONSTER_ID_BASE + i);
+    }
+    hbSearchEntries_.erase(
+        std::remove_if(hbSearchEntries_.begin(), hbSearchEntries_.end(),
+                       [deletedId](const SearchIndexEntry& se) {
+                           return se.category == CAT_MONSTER && se.recordId == deletedId;
+                       }),
+        hbSearchEntries_.end());
+    for (auto& se : hbSearchEntries_) {
+        if (se.category == CAT_MONSTER && se.recordId > deletedId) {
+            --se.recordId;
+        }
+    }
+    return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
+}
+
+bool SrdDatabase::deleteHomebrewSpell(size_t hbIdx, const char* homebrewDir) {
+    if (hbIdx >= hbSpells_.size() || !hbSpells_[hbIdx].fromOnDevice) return false;
+    uint16_t deletedId = hbSpells_[hbIdx].id;
+    hbSpells_.erase(hbSpells_.begin() + static_cast<ptrdiff_t>(hbIdx));
+    for (size_t i = hbIdx; i < hbSpells_.size(); ++i) {
+        hbSpells_[i].id = static_cast<uint16_t>(HOMEBREW_SPELL_ID_BASE + i);
+    }
+    hbSearchEntries_.erase(
+        std::remove_if(hbSearchEntries_.begin(), hbSearchEntries_.end(),
+                       [deletedId](const SearchIndexEntry& se) {
+                           return se.category == CAT_SPELL && se.recordId == deletedId;
+                       }),
+        hbSearchEntries_.end());
+    for (auto& se : hbSearchEntries_) {
+        if (se.category == CAT_SPELL && se.recordId > deletedId) {
+            --se.recordId;
+        }
+    }
+    return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
+}
+
 } // namespace dmtk
