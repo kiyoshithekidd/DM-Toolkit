@@ -72,6 +72,8 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 
 ## Changelog
 
+* **v1.5.2:**
+  * Fixed `d6`, `d8`, `d10`, and `d100` 3D mesh face-normal alignment, watertight `d10`/`d100` trapezohedron vertices, and `d6` pip Z-layering so there are zero gaps while rolling and clean `d6` results.
 * **v1.5.1:**
   * **True 3D Tumbling Dice & Face-Bound Numerals:** Replaced 2D pinwheel rotation with full 3D quaternion-rotated polyhedral meshes (`d4`–`d100`) using `DiceRoller` physics, with back-face culling, directional facet lighting, 3D-projected `d6` pips, and perspective-foreshortened numerals stamped directly onto each visible die face.
   * **Realistic Dice Roll Audio (`SFX_DICE_ROLL`):** Replaced the 5-hit skittering burst with organic, irregular resin/wood clacks and an initial felt-tray thump.
