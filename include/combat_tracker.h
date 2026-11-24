@@ -9,13 +9,14 @@ namespace dmtk {
 
 struct PartyMember {
     std::string name;
-    std::string className = "Adventurer";
-    int8_t      initBonus = 0;
-    uint8_t     level     = 1;
-    uint8_t     ac        = 12;
-    int         maxHp     = 18;
-    int         currentHp = 18;
-    bool        active    = true;
+    std::string className         = "Adventurer";
+    int8_t      initBonus         = 0;
+    uint8_t     level             = 1;
+    uint8_t     ac                = 12;
+    int         maxHp             = 18;
+    int         currentHp         = 18;
+    bool        active            = true;
+    uint8_t     passivePerception = 12;
 };
 
 struct EncounterSlot {
@@ -37,12 +38,17 @@ struct Combatant {
     int8_t      initBonus      = 0;
     int         currentHp      = 0;
     int         maxHp          = 0;
+    int         tempHp         = 0;
     uint16_t    armorClass     = 10;
     uint16_t    conditionsMask = 0;
     bool        concentrating  = false;
     uint8_t     deathSuccesses = 0;
     uint8_t     deathFailures  = 0;
     bool        stabilized     = false;
+    uint8_t     legendActions  = 0;
+    uint8_t     legendMax      = 0;
+    bool        rechargeReady  = true;
+    uint8_t     rechargeMin    = 0; // 0 = none, 5 = Recharge 5-6, 6 = Recharge 6
 };
 
 class CombatTracker {
@@ -67,8 +73,12 @@ public:
     // Quick-start a fight with party + a single monster (when tracker is empty)
     void addPartyIfMissing(const std::vector<PartyMember>& party, uint32_t& rngState);
 
+    // Add a Lair Action marker at Initiative 20
+    int addLairAction();
+
     void applyHpDelta(int index, int delta);
     void setHp(int index, int hp);
+    void setTempHp(int index, int amount);
     bool canUndoHp() const { return lastHpEditId_ != 0; }
     bool undoLastHp();
     int  lastHpDelta() const { return lastHpDelta_; }
@@ -79,8 +89,15 @@ public:
     void toggleConcentration(int index);
     void recordDeathSave(int index, bool success);
     void stabilize(int index);
+    void useLegendaryAction(int index);
+    void resetLegendaryActions(int index);
+    int  rollRecharge(int index, uint32_t& rngState);
+    void toggleRechargeReady(int index);
     void setInitiative(int index, int newInit);
     void removeCombatant(int index);
+
+    uint32_t computeDefeatedXp(const SrdDatabase& db) const;
+    void     remapDeletedHomebrewMonster(uint16_t deletedId);
 
     void setAutoSkipDead(bool skip) { autoSkipDead_ = skip; }
     bool autoSkipDead() const { return autoSkipDead_; }
@@ -101,19 +118,25 @@ public:
     void restoreState(int roundNum, int activeIdx, std::vector<Combatant>&& list);
 
 private:
-    bool                   inCombat_        = false;
-    bool                   autoSkipDead_    = true;
-    int                    roundNumber_     = 1;
-    int                    activeTurnIndex_ = 0;
-    int                    selectedIndex_   = 0;
-    uint32_t               nextInstanceId_  = 1;
-    uint32_t               lastHpEditId_    = 0;
-    int                    lastHpPrevValue_ = 0;
-    int                    lastHpDelta_     = 0;
+    bool                   inCombat_         = false;
+    bool                   autoSkipDead_     = true;
+    int                    roundNumber_      = 1;
+    int                    activeTurnIndex_  = 0;
+    int                    selectedIndex_    = 0;
+    uint32_t               nextInstanceId_   = 1;
+    uint32_t               lastHpEditId_     = 0;
+    int                    lastHpPrevValue_  = 0;
+    int                    lastHpPrevTempHp_ = 0;
+    bool                   lastHpPrevConc_   = false;
+    uint8_t                lastHpPrevDsSucc_ = 0;
+    uint8_t                lastHpPrevDsFail_ = 0;
+    bool                   lastHpPrevStab_   = false;
+    int                    lastHpDelta_      = 0;
     std::vector<Combatant> combatants_;
 
     int countExistingMonsters(uint16_t monsterId) const;
     void sortPreservingActive();
+    static void detectBossMechanics(uint16_t monsterId, const SrdDatabase& db, Combatant& c);
 };
 
 } // namespace dmtk

@@ -221,10 +221,11 @@ void DiceRoller::roll(DieShape shape, int modifier, RollAdvantageMode advMode, u
 
 void DiceRoller::rollPool(DieShape shape, int count, int modifier, RollAdvantageMode advMode, uint32_t& rngState) {
     activeShape_    = shape;
-    poolCount_      = std::clamp(count, 1, MAX_POOL_DICE);
-    activeModifier_ = std::clamp(modifier, -10, 20);
+    poolCount_      = std::clamp(count, 1, MAX_LOGICAL_DICE);
+    activeModifier_ = std::clamp(modifier, -20, 50);
     activeAdvMode_  = (shape == DIE_D20 && poolCount_ == 1) ? advMode : ROLL_NORMAL;
     recorded_       = false;
+    extraRolls_.clear();
 
     for (auto& d : dice_) {
         d.active  = false;
@@ -241,7 +242,7 @@ void DiceRoller::rollPool(DieShape shape, int count, int modifier, RollAdvantage
         spawnDie(dice_[0], DIE_D20, -0.45f, 0.0f, rngState);
         spawnDie(dice_[1], DIE_D20,  0.45f, 0.0f, rngState);
     } else {
-        activeCount_ = poolCount_;
+        activeCount_ = std::min(poolCount_, MAX_POOL_DICE);
         if (activeCount_ == 1) {
             spawnDie(dice_[0], shape, 0.0f, 0.0f, rngState);
         } else {
@@ -254,6 +255,10 @@ void DiceRoller::rollPool(DieShape shape, int count, int modifier, RollAdvantage
                 float oy = (rows > 1) ? (0.5f - (static_cast<float>(r) / (rows - 1))) * 0.9f : 0.0f;
                 spawnDie(dice_[static_cast<size_t>(i)], shape, ox, oy, rngState);
             }
+        }
+        int sides = sidesForShape(shape);
+        for (int i = activeCount_; i < poolCount_; ++i) {
+            extraRolls_.push_back(static_cast<int>(diceRng(rngState) % static_cast<uint32_t>(sides)) + 1);
         }
     }
 }
@@ -456,6 +461,10 @@ void DiceRoller::finalizeRoll() {
     } else {
         for (int i = 0; i < activeCount_; ++i) {
             int r = dice_[static_cast<size_t>(i)].result;
+            rolls.push_back(r);
+            raw += r;
+        }
+        for (int r : extraRolls_) {
             rolls.push_back(r);
             raw += r;
         }

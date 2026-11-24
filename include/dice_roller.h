@@ -68,7 +68,8 @@ struct DiceExpr {
 
 class DiceRoller {
 public:
-    static constexpr int MAX_POOL_DICE = 12;
+    static constexpr int MAX_POOL_DICE    = 12;
+    static constexpr int MAX_LOGICAL_DICE = 64;
 
     static int sidesForShape(DieShape s);
     static const char* shapeLabel(DieShape s);
@@ -105,6 +106,7 @@ public:
 
 private:
     std::array<DieBody, MAX_POOL_DICE> dice_{};
+    std::vector<int>              extraRolls_;
     int                           activeCount_    = 0;
     int                           poolCount_      = 1;
     DieShape                      activeShape_    = DIE_D20;

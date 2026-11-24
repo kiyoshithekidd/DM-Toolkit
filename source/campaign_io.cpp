@@ -192,6 +192,7 @@ static std::vector<std::string> splitTopLevelObjects(const std::string& arrayStr
 }
 
 bool CampaignManager::saveCampaign(const CampaignData& campaign, const CombatTracker* activeFight) const {
+    ensureDirectories();
     std::string finalPath = campaignPathForSlug(campaign.slug);
     std::string tmpPath   = finalPath + ".tmp";
 
@@ -202,16 +203,22 @@ bool CampaignManager::saveCampaign(const CampaignData& campaign, const CombatTra
     std::fprintf(fp, "  \"campaign_name\": \"%s\",\n", escapeJson(campaign.name).c_str());
     std::fprintf(fp, "  \"slug\": \"%s\",\n", escapeJson(campaign.slug).c_str());
     std::fprintf(fp, "  \"party_level\": %u,\n", static_cast<unsigned>(campaign.partyLevel));
+    std::fprintf(fp, "  \"session_num\": %u,\n", static_cast<unsigned>(campaign.sessionNumber));
+    std::fprintf(fp, "  \"day_num\": %u,\n", static_cast<unsigned>(campaign.dayNumber));
+    std::fprintf(fp, "  \"time_slot\": %u,\n", static_cast<unsigned>(campaign.timeSlot));
+    std::fprintf(fp, "  \"weather\": %u,\n", static_cast<unsigned>(campaign.weather));
 
     std::fprintf(fp, "  \"party\": [\n");
     for (size_t i = 0; i < campaign.party.size(); ++i) {
         const auto& p = campaign.party[i];
         std::fprintf(fp,
                      "    {\"name\": \"%s\", \"class_name\": \"%s\", \"init_bonus\": %d, "
-                     "\"level\": %u, \"ac\": %u, \"max_hp\": %d, \"current_hp\": %d, \"active\": %s}%s\n",
+                     "\"level\": %u, \"ac\": %u, \"max_hp\": %d, \"current_hp\": %d, "
+                     "\"passive_perc\": %u, \"active\": %s}%s\n",
                      escapeJson(p.name).c_str(), escapeJson(p.className).c_str(),
                      static_cast<int>(p.initBonus), static_cast<unsigned>(p.level),
                      static_cast<unsigned>(p.ac), p.maxHp, p.currentHp,
+                     static_cast<unsigned>(p.passivePerception),
                      p.active ? "true" : "false",
                      (i + 1 < campaign.party.size()) ? "," : "");
     }
@@ -229,6 +236,31 @@ bool CampaignManager::saveCampaign(const CampaignData& campaign, const CombatTra
         }
         std::fprintf(fp, "]}%s\n", (i + 1 < campaign.encounters.size()) ? "," : "");
     }
+    std::fprintf(fp, "  ],\n");
+
+    std::fprintf(fp, "  \"notes\": [\n");
+    for (size_t i = 0; i < campaign.notes.size(); ++i) {
+        const auto& n = campaign.notes[i];
+        std::fprintf(fp, "    {\"session\": %u, \"text\": \"%s\"}%s\n",
+                     static_cast<unsigned>(n.sessionNum),
+                     escapeJson(n.text).c_str(),
+                     (i + 1 < campaign.notes.size()) ? "," : "");
+    }
+    std::fprintf(fp, "  ],\n");
+
+    std::fprintf(fp, "  \"npcs\": [\n");
+    for (size_t i = 0; i < campaign.savedNpcs.size(); ++i) {
+        const auto& npc = campaign.savedNpcs[i];
+        std::fprintf(fp,
+                     "    {\"name\": \"%s\", \"ancestry\": \"%s\", \"occupation\": \"%s\", "
+                     "\"quirk\": \"%s\", \"note\": \"%s\"}%s\n",
+                     escapeJson(npc.name).c_str(),
+                     escapeJson(npc.ancestry).c_str(),
+                     escapeJson(npc.occupation).c_str(),
+                     escapeJson(npc.quirk).c_str(),
+                     escapeJson(npc.note).c_str(),
+                     (i + 1 < campaign.savedNpcs.size()) ? "," : "");
+    }
     std::fprintf(fp, "  ]");
 
     if (activeFight && activeFight->isInCombat()) {
@@ -241,8 +273,9 @@ bool CampaignManager::saveCampaign(const CampaignData& campaign, const CombatTra
             const auto& c = list[i];
             std::fprintf(fp,
                          "      {\"name\": \"%s\", \"is_player\": %s, \"monster_id\": %u, "
-                         "\"init_roll\": %d, \"init_bonus\": %d, \"hp\": %d, \"max_hp\": %d, "
-                         "\"ac\": %u, \"cond\": %u}%s\n",
+                         "\"init_roll\": %d, \"init_bonus\": %d, \"hp\": %d, \"max_hp\": %d, \"temp_hp\": %d, "
+                         "\"ac\": %u, \"cond\": %u, \"conc\": %s, \"ds_succ\": %u, \"ds_fail\": %u, \"stab\": %s, "
+                         "\"leg_act\": %u, \"leg_max\": %u, \"rech_rdy\": %s, \"rech_min\": %u}%s\n",
                          escapeJson(c.displayName).c_str(),
                          c.isPlayer ? "true" : "false",
                          static_cast<unsigned>(c.monsterId),
@@ -250,8 +283,17 @@ bool CampaignManager::saveCampaign(const CampaignData& campaign, const CombatTra
                          static_cast<int>(c.initBonus),
                          c.currentHp,
                          c.maxHp,
+                         c.tempHp,
                          static_cast<unsigned>(c.armorClass),
                          static_cast<unsigned>(c.conditionsMask),
+                         c.concentrating ? "true" : "false",
+                         static_cast<unsigned>(c.deathSuccesses),
+                         static_cast<unsigned>(c.deathFailures),
+                         c.stabilized ? "true" : "false",
+                         static_cast<unsigned>(c.legendActions),
+                         static_cast<unsigned>(c.legendMax),
+                         c.rechargeReady ? "true" : "false",
+                         static_cast<unsigned>(c.rechargeMin),
                          (i + 1 < list.size()) ? "," : "");
         }
         std::fprintf(fp, "    ]\n  }\n");
@@ -287,22 +329,27 @@ bool CampaignManager::loadCampaign(const std::string& slug, CampaignData& outCam
     std::fclose(fp);
 
     outCampaign = CampaignData{};
-    outCampaign.name       = jStr(content, "campaign_name", slug.c_str());
-    outCampaign.slug       = jStr(content, "slug", slug.c_str());
-    outCampaign.partyLevel = static_cast<uint8_t>(std::clamp(jInt(content, "party_level", 1), 1, 20));
+    outCampaign.name          = jStr(content, "campaign_name", slug.c_str());
+    outCampaign.slug          = jStr(content, "slug", slug.c_str());
+    outCampaign.partyLevel    = static_cast<uint8_t>(std::clamp(jInt(content, "party_level", 1), 1, 20));
+    outCampaign.sessionNumber = static_cast<uint16_t>(std::clamp(jInt(content, "session_num", 1), 1, 999));
+    outCampaign.dayNumber     = static_cast<uint16_t>(std::clamp(jInt(content, "day_num", 1), 1, 9999));
+    outCampaign.timeSlot      = static_cast<uint8_t>(std::clamp(jInt(content, "time_slot", 1), 0, 4));
+    outCampaign.weather       = static_cast<uint8_t>(std::clamp(jInt(content, "weather", 0), 0, 5));
 
     std::string partyArr = extractBracketSlice(content, "party", '[', ']');
     for (const auto& obj : splitTopLevelObjects(partyArr)) {
         PartyMember p;
-        p.name      = jStr(obj, "name", "Hero");
-        p.className = jStr(obj, "class_name", "Adventurer");
-        p.initBonus = static_cast<int8_t>(std::clamp(jInt(obj, "init_bonus", 0), -10, 20));
-        p.level     = static_cast<uint8_t>(std::clamp(jInt(obj, "level", outCampaign.partyLevel), 1, 20));
-        p.ac        = static_cast<uint8_t>(std::clamp(jInt(obj, "ac", 12), 1, 30));
-        int defHp   = 10 + static_cast<int>(p.level) * 6;
-        p.maxHp     = std::max(1, jInt(obj, "max_hp", defHp));
-        p.currentHp = std::clamp(jInt(obj, "current_hp", p.maxHp), 0, p.maxHp);
-        p.active    = jBool(obj, "active", true);
+        p.name              = jStr(obj, "name", "Hero");
+        p.className         = jStr(obj, "class_name", "Adventurer");
+        p.initBonus         = static_cast<int8_t>(std::clamp(jInt(obj, "init_bonus", 0), -10, 20));
+        p.level             = static_cast<uint8_t>(std::clamp(jInt(obj, "level", outCampaign.partyLevel), 1, 20));
+        p.ac                = static_cast<uint8_t>(std::clamp(jInt(obj, "ac", 12), 1, 30));
+        int defHp           = 10 + static_cast<int>(p.level) * 6;
+        p.maxHp             = std::max(1, jInt(obj, "max_hp", defHp));
+        p.currentHp         = std::clamp(jInt(obj, "current_hp", p.maxHp), 0, p.maxHp);
+        p.passivePerception = static_cast<uint8_t>(std::clamp(jInt(obj, "passive_perc", 12), 1, 35));
+        p.active            = jBool(obj, "active", true);
         outCampaign.party.push_back(p);
     }
 
@@ -318,6 +365,25 @@ bool CampaignManager::loadCampaign(const std::string& slug, CampaignData& outCam
             enc.slots.push_back(slot);
         }
         outCampaign.encounters.push_back(enc);
+    }
+
+    std::string notesArr = extractBracketSlice(content, "notes", '[', ']');
+    for (const auto& nobj : splitTopLevelObjects(notesArr)) {
+        CampaignNote n;
+        n.sessionNum = static_cast<uint16_t>(std::clamp(jInt(nobj, "session", 1), 1, 999));
+        n.text       = jStr(nobj, "text", "");
+        if (!n.text.empty()) outCampaign.notes.push_back(std::move(n));
+    }
+
+    std::string npcsArr = extractBracketSlice(content, "npcs", '[', ']');
+    for (const auto& npobj : splitTopLevelObjects(npcsArr)) {
+        SavedNpc npc;
+        npc.name       = jStr(npobj, "name", "");
+        npc.ancestry   = jStr(npobj, "ancestry", "Human");
+        npc.occupation = jStr(npobj, "occupation", "Traveler");
+        npc.quirk      = jStr(npobj, "quirk", "");
+        npc.note       = jStr(npobj, "note", "");
+        if (!npc.name.empty()) outCampaign.savedNpcs.push_back(std::move(npc));
     }
 
     if (outFight) {
@@ -337,8 +403,17 @@ bool CampaignManager::loadCampaign(const std::string& slug, CampaignData& outCam
                 c.initBonus      = static_cast<int8_t>(jInt(cobj, "init_bonus", 0));
                 c.currentHp      = jInt(cobj, "hp", 0);
                 c.maxHp          = jInt(cobj, "max_hp", 0);
+                c.tempHp         = std::max(0, jInt(cobj, "temp_hp", 0));
                 c.armorClass     = static_cast<uint16_t>(jInt(cobj, "ac", 10));
                 c.conditionsMask = static_cast<uint16_t>(jInt(cobj, "cond", 0));
+                c.concentrating  = jBool(cobj, "conc", false);
+                c.deathSuccesses = static_cast<uint8_t>(std::clamp(jInt(cobj, "ds_succ", 0), 0, 3));
+                c.deathFailures  = static_cast<uint8_t>(std::clamp(jInt(cobj, "ds_fail", 0), 0, 3));
+                c.stabilized     = jBool(cobj, "stab", false);
+                c.legendActions  = static_cast<uint8_t>(std::clamp(jInt(cobj, "leg_act", 0), 0, 9));
+                c.legendMax      = static_cast<uint8_t>(std::clamp(jInt(cobj, "leg_max", 0), 0, 9));
+                c.rechargeReady  = jBool(cobj, "rech_rdy", true);
+                c.rechargeMin    = static_cast<uint8_t>(std::clamp(jInt(cobj, "rech_min", 0), 0, 6));
                 list.push_back(c);
             }
             if (!list.empty()) {
@@ -572,6 +647,9 @@ int CampaignManager::importPartyCharacters(CampaignData& campaign) const {
             int defHp    = 10 + static_cast<int>(pm.level) * 6;
             pm.maxHp     = std::max(1, jInt(obj, "max_hp", defHp));
             pm.currentHp = std::clamp(jInt(obj, "current_hp", pm.maxHp), 0, pm.maxHp);
+            int ppVal    = jInt(obj, "passive_perception", -1);
+            if (ppVal < 0) ppVal = jInt(obj, "passive_perc", 12);
+            pm.passivePerception = static_cast<uint8_t>(std::clamp(ppVal, 1, 35));
             pm.active    = jBool(obj, "active", true);
 
             bool updated = false;
@@ -582,10 +660,12 @@ int CampaignManager::importPartyCharacters(CampaignData& campaign) const {
                     break;
                 }
             }
-            if (!updated && campaign.party.size() < 8) {
+            if (updated) {
+                ++imported;
+            } else if (campaign.party.size() < 8) {
                 campaign.party.push_back(pm);
+                ++imported;
             }
-            ++imported;
         }
     }
     closedir(dir);

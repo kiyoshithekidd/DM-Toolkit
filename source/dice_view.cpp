@@ -469,9 +469,13 @@ void renderTopDiceTray(C2D_TextBuf buf, C2D_SpriteSheet sheet, const AppState& a
 
         if (latest.rolls.size() > 1) {
             std::string rollList = "[";
-            for (size_t i = 0; i < latest.rolls.size(); ++i) {
+            size_t showN = std::min<size_t>(latest.rolls.size(), 6);
+            for (size_t i = 0; i < showN; ++i) {
                 if (i > 0) rollList += ",";
                 rollList += std::to_string(latest.rolls[i]);
+            }
+            if (latest.rolls.size() > showN) {
+                rollList += ",+" + std::to_string(latest.rolls.size() - showN);
             }
             rollList += "]";
             C2D_Text rl;

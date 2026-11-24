@@ -485,6 +485,170 @@ static void testV150Features(SrdDatabase& db) {
     std::printf("[PASS] v1.5.0 Engine Features (#28-#33)\n");
 }
 
+static void testV160FixesAndFeatures(SrdDatabase& db) {
+    uint32_t rng = 0xBEEF2026u;
+
+    // 1. DM Screen Cheat Sheet cards compiled into SRD (#53)
+    std::vector<SearchHit> hits;
+    db.searchReference("difficulty classes", REF_TAB_COMBAT, hits, 5);
+    assert(!hits.empty());
+    RuleView dmRv{};
+    assert(db.getRule(hits[0].recordId, dmRv));
+    assert(std::string(dmRv.category) == "DM Screen");
+    db.searchReference("exhaustion levels", REF_TAB_COMBAT, hits, 5);
+    assert(!hits.empty());
+
+    // 2. High-CR >12 dice pool support (#46)
+    DiceRoller dr;
+    dr.rollPool(DIE_D6, 26, 8, ROLL_NORMAL, rng); // Ancient Red Dragon Fire Breath (26d6+8)
+    assert(dr.currentPoolCount() == 26);
+    assert(dr.activeDieCount() == DiceRoller::MAX_POOL_DICE);
+    dr.finishImmediately();
+    assert(dr.history()[0].rolls.size() == 26);
+    int sum26 = 0;
+    for (int r : dr.history()[0].rolls) {
+        assert(r >= 1 && r <= 6);
+        sum26 += r;
+    }
+    assert(dr.lastTotal() == sum26 + 8);
+
+    // 3. Temp HP absorption, full Undo snapshot, Boss Legendary/Recharge, Lair Action, Defeated XP, prevTurn (#42, #51, #52)
+    db.searchMonsters("adult red dragon", -1, CR_FILTER_ALL, hits, 5);
+    assert(!hits.empty());
+    uint16_t dragonId = hits[0].recordId;
+    db.searchMonsters("goblin", -1, CR_FILTER_ALL, hits, 5);
+    assert(!hits.empty());
+    uint16_t goblinId = hits[0].recordId;
+
+    SavedEncounter bossEnc;
+    bossEnc.name = "Boss Fight";
+    bossEnc.slots = {{dragonId, 1}, {goblinId, 1}};
+    std::vector<PartyMember> party = {
+        {"Aria", "Wizard", 2, 10, 15, 60, 60, true, 14},
+        {"Bram", "Fighter", 1, 10, 18, 90, 90, false, 11} // benched
+    };
+
+    CombatTracker tr;
+    tr.startEncounter(bossEnc, party, db, rng, true);
+    assert(tr.combatants().size() == 3); // Aria + Dragon + Goblin (Bram benched)
+
+    int dragonIdx = -1, goblinIdx = -1, heroIdx = -1;
+    for (size_t i = 0; i < tr.combatants().size(); ++i) {
+        if (tr.combatants()[i].isPlayer) heroIdx = static_cast<int>(i);
+        else if (tr.combatants()[i].monsterId == dragonId) dragonIdx = static_cast<int>(i);
+        else if (tr.combatants()[i].monsterId == goblinId) goblinIdx = static_cast<int>(i);
+    }
+    assert(dragonIdx >= 0 && goblinIdx >= 0 && heroIdx >= 0);
+    assert(tr.combatants()[static_cast<size_t>(dragonIdx)].legendMax == 3);
+    assert(tr.combatants()[static_cast<size_t>(dragonIdx)].legendActions == 3);
+    tr.useLegendaryAction(dragonIdx);
+    assert(tr.combatants()[static_cast<size_t>(dragonIdx)].legendActions == 2);
+
+    // Temp HP absorbs damage first, and Undo restores Temp HP + Concentration + Death Saves (#42, #52)
+    tr.toggleConcentration(heroIdx);
+    tr.setTempHp(heroIdx, 10);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].tempHp == 10);
+    tr.applyHpDelta(heroIdx, -15); // 10 absorbed by temp, 5 to HP
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].tempHp == 0);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].currentHp == 55);
+    assert(tr.undoLastHp());
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].tempHp == 10);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].currentHp == 60);
+
+    // Drop concentrating hero to 0 -> concentration drops -> Undo restores concentration!
+    tr.applyHpDelta(heroIdx, -100);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].currentHp == 0);
+    assert(!tr.combatants()[static_cast<size_t>(heroIdx)].concentrating);
+    assert(tr.undoLastHp());
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].currentHp == 60);
+    assert(tr.combatants()[static_cast<size_t>(heroIdx)].concentrating);
+
+    // Kill goblin -> computeDefeatedXp == 50, prevTurn respects autoSkipDead
+    tr.applyHpDelta(goblinIdx, -50);
+    assert(tr.computeDefeatedXp(db) == 50);
+    tr.setAutoSkipDead(true);
+    tr.prevTurn();
+    assert(tr.combatants()[static_cast<size_t>(tr.activeTurnIndex())].isPlayer ||
+           tr.combatants()[static_cast<size_t>(tr.activeTurnIndex())].currentHp > 0);
+
+    // Add Lair Action at Init 20
+    int lairIdx = tr.addLairAction();
+    assert(lairIdx >= 0 && tr.combatants()[static_cast<size_t>(lairIdx)].initRoll == 20);
+
+    // 4. Campaign save/reload preserves conc, death saves, tempHp, legendActions, notes, npcs, world state, passive_perc (#42, #48, #49, #50)
+    const std::string v160Root = "/tmp/dmtk_test_v160_fresh";
+    CampaignManager mgr(v160Root);
+    CampaignData camp;
+    camp.name          = "Dragonspire";
+    camp.slug          = "dragonspire";
+    camp.partyLevel    = 10;
+    camp.sessionNumber = 7;
+    camp.dayNumber     = 14;
+    camp.timeSlot      = 3;
+    camp.weather       = 2;
+    camp.party         = party;
+    camp.notes.push_back({7, "Met the archmage at the tower."});
+    camp.savedNpcs.push_back({"Bram Mossbank", "Dwarf", "Blacksmith", "Hums softly.", "Owes party a shield"});
+
+    // Save directly without prior ensureDirectories() (#48)
+    assert(mgr.saveCampaign(camp, &tr));
+
+    CampaignData loaded;
+    CombatTracker loadedFight;
+    assert(mgr.loadCampaign("dragonspire", loaded, &loadedFight));
+    assert(loaded.sessionNumber == 7 && loaded.dayNumber == 14 && loaded.timeSlot == 3 && loaded.weather == 2);
+    assert(loaded.notes.size() == 1 && loaded.notes[0].sessionNum == 7);
+    assert(loaded.savedNpcs.size() == 1 && loaded.savedNpcs[0].name == "Bram Mossbank");
+    assert(loaded.party.size() == 2 && loaded.party[0].passivePerception == 14);
+    assert(loadedFight.isInCombat());
+    bool foundConcHero = false, foundBossLa = false;
+    for (const auto& c : loadedFight.combatants()) {
+        if (c.isPlayer && c.concentrating && c.tempHp == 10) foundConcHero = true;
+        if (!c.isPlayer && c.monsterId == dragonId && c.legendMax == 3 && c.legendActions == 2) foundBossLa = true;
+    }
+    assert(foundConcHero && foundBossLa);
+
+    // 5. importPartyCharacters does not overcount beyond 8-hero cap (#48)
+    while (loaded.party.size() < 8) {
+        loaded.party.push_back({"Filler" + std::to_string(loaded.party.size()), "Fighter", 0, 1, 14, 12, 12, true, 10});
+    }
+    std::string extraFile = mgr.partyImportDir() + "/overflow.json";
+    FILE* ofp = std::fopen(extraFile.c_str(), "wb");
+    assert(ofp != nullptr);
+    std::fprintf(ofp, "{\"name\": \"NinthHero\", \"class\": \"Bard\", \"level\": 3}\n");
+    std::fclose(ofp);
+    int impCount = mgr.importPartyCharacters(loaded);
+    assert(impCount == 0 && loaded.party.size() == 8);
+
+    // 6. Homebrew rename updates in-place without duplicating & preserves type/xp (#44)
+    HomebrewMonster hb;
+    hb.name = "Frost Imp";
+    hb.type = MT_FIEND;
+    hb.armorClass = 13;
+    hb.hitPoints = 22;
+    hb.crIndex = 5; // CR 2
+    assert(db.saveHomebrewMonster(hb, mgr.homebrewDir().c_str()));
+    int editIdx = static_cast<int>(db.homebrewMonsterCount()) - 1;
+    uint32_t beforeRename = db.homebrewMonsterCount();
+    hb.name = "Frost Imp Lord";
+    assert(db.saveHomebrewMonster(hb, mgr.homebrewDir().c_str(), editIdx));
+    assert(db.homebrewMonsterCount() == beforeRename);
+    assert(db.homebrewMonsters()[static_cast<size_t>(editIdx)].name == "Frost Imp Lord");
+    assert(db.homebrewMonsters()[static_cast<size_t>(editIdx)].type == MT_FIEND);
+
+    // 7. New Generators: Tavern, Quest Hook, Shop & exact SRD multiplier (#45, #53)
+    assert(std::fabs(Generators::encounterMultiplier(1, 2) - 1.5f) < 0.01f); // small party +1 step
+    assert(std::fabs(Generators::encounterMultiplier(3, 6) - 1.5f) < 0.01f); // large party -1 step
+    GeneratedTavern tv = Generators::generateTavern(rng);
+    assert(!tv.name.empty() && !tv.rumor.empty());
+    GeneratedQuestHook qh = Generators::generateQuestHook(rng);
+    assert(!qh.title.empty() && !qh.twist.empty());
+    GeneratedShop sh = Generators::generateShop(db, 5, rng);
+    assert(!sh.name.empty() && sh.stock.size() >= 4);
+
+    std::printf("[PASS] v1.6.0 Bug Fixes (#42-#48) & Campaign Enhancements (#49-#53)\n");
+}
+
 int main() {
     SrdDatabase db;
     testSrdLoadAndSearch(db);
@@ -493,6 +657,7 @@ int main() {
     testDiceRoller();
     testCampaignPersistenceAndHomebrew(db);
     testV150Features(db);
-    std::printf("ALL DM'S TOOLKIT v1.5.0 TESTS PASSED!\n");
+    testV160FixesAndFeatures(db);
+    std::printf("ALL DM'S TOOLKIT v1.6.0 TESTS PASSED!\n");
     return 0;
 }

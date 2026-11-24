@@ -590,6 +590,7 @@ void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath, bool isOnDe
         hb.id           = static_cast<uint16_t>(HOMEBREW_MONSTER_ID_BASE + hbMonsters_.size());
         hb.name         = name;
         hb.sizeAndAlign = extractJsonStr(obj, "size_align", "Medium humanoid, unaligned");
+        hb.type         = static_cast<uint8_t>(std::clamp(extractJsonInt(obj, "type", MT_HUMANOID), 0, static_cast<int>(MT_COUNT) - 1));
         hb.armorClass   = static_cast<uint16_t>(std::max(1, extractJsonInt(obj, "ac", 12)));
         hb.hitPoints    = static_cast<uint16_t>(std::max(1, extractJsonInt(obj, "hp", 10)));
         hb.speed        = extractJsonStr(obj, "speed", "30 ft.");
@@ -602,6 +603,13 @@ void SrdDatabase::parseHomebrewJsonFile(const std::string& filePath, bool isOnDe
         hb.initBonus    = static_cast<int8_t>(abilityModifier(hb.dexScore));
         int crInt       = extractJsonInt(obj, "cr", 1);
         hb.crIndex      = static_cast<uint8_t>(crInt <= 0 ? 0 : std::min(33, crInt + 3));
+        static const uint32_t kCrXp[34] = {
+            10, 25, 50, 100, 200, 450, 700, 1100, 1800, 2300, 2900, 3900, 5000, 5900,
+            7200, 8400, 10000, 11500, 13000, 15000, 18000, 20000, 22000, 25000, 33000,
+            41000, 50000, 62000, 75000, 90000, 105000, 120000, 135000, 155000
+        };
+        int xpInt       = extractJsonInt(obj, "xp", -1);
+        hb.xp           = (xpInt >= 0) ? static_cast<uint32_t>(xpInt) : kCrXp[std::min<uint8_t>(hb.crIndex, 33)];
         hb.defenses     = extractJsonStr(obj, "defenses", "");
         hb.sensesLang   = extractJsonStr(obj, "senses", "");
         hb.fromOnDevice = isOnDeviceFile;
@@ -726,11 +734,19 @@ static bool writeOnDeviceHomebrewFile(const char* homebrewDir,
         const std::string& actName = m.actions.empty() ? std::string("Attack") : m.actions[0].name;
         const std::string& actDesc = m.actions.empty() ? std::string("") : m.actions[0].fullDesc;
         std::fprintf(fp,
-                     "    {\"name\": \"%s\", \"size_align\": \"%s\", \"ac\": %u, \"hp\": %u, "
-                     "\"cr\": %d, \"dex\": %u, \"action_name\": \"%s\", \"action\": \"%s\"}%s\n",
+                     "    {\"name\": \"%s\", \"size_align\": \"%s\", \"type\": %u, \"ac\": %u, \"hp\": %u, "
+                     "\"cr\": %d, \"xp\": %u, \"speed\": \"%s\", "
+                     "\"str\": %u, \"dex\": %u, \"con\": %u, \"int\": %u, \"wis\": %u, \"cha\": %u, "
+                     "\"defenses\": \"%s\", \"senses\": \"%s\", "
+                     "\"action_name\": \"%s\", \"action\": \"%s\"}%s\n",
                      escJson(m.name).c_str(), escJson(m.sizeAndAlign).c_str(),
+                     static_cast<unsigned>(m.type),
                      static_cast<unsigned>(m.armorClass), static_cast<unsigned>(m.hitPoints),
-                     crInt, static_cast<unsigned>(m.dexScore),
+                     crInt, static_cast<unsigned>(m.xp), escJson(m.speed).c_str(),
+                     static_cast<unsigned>(m.strScore), static_cast<unsigned>(m.dexScore),
+                     static_cast<unsigned>(m.conScore), static_cast<unsigned>(m.intScore),
+                     static_cast<unsigned>(m.wisScore), static_cast<unsigned>(m.chaScore),
+                     escJson(m.defenses).c_str(), escJson(m.sensesLang).c_str(),
                      escJson(actName).c_str(), escJson(actDesc).c_str(),
                      (i + 1 < onDevMonsters.size()) ? "," : "");
     }
@@ -739,10 +755,12 @@ static bool writeOnDeviceHomebrewFile(const char* homebrewDir,
         const auto& s = *onDevSpells[i];
         std::fprintf(fp,
                      "    {\"name\": \"%s\", \"level\": %u, \"school\": \"%s\", "
-                     "\"casting_time\": \"%s\", \"range\": \"%s\", \"duration\": \"%s\", \"desc\": \"%s\"}%s\n",
+                     "\"casting_time\": \"%s\", \"range\": \"%s\", \"components\": \"%s\", "
+                     "\"duration\": \"%s\", \"classes\": \"%s\", \"desc\": \"%s\"}%s\n",
                      escJson(s.name).c_str(), static_cast<unsigned>(s.level),
                      escJson(s.school).c_str(), escJson(s.castingTime).c_str(),
-                     escJson(s.range).c_str(), escJson(s.duration).c_str(),
+                     escJson(s.range).c_str(), escJson(s.components).c_str(),
+                     escJson(s.duration).c_str(), escJson(s.classes).c_str(),
                      escJson(s.body).c_str(),
                      (i + 1 < onDevSpells.size()) ? "," : "");
     }
@@ -753,11 +771,17 @@ static bool writeOnDeviceHomebrewFile(const char* homebrewDir,
     return std::rename(tmpPath.c_str(), finalPath.c_str()) == 0;
 }
 
-bool SrdDatabase::saveHomebrewMonster(const HomebrewMonster& mon, const char* homebrewDir) {
+bool SrdDatabase::saveHomebrewMonster(const HomebrewMonster& mon, const char* homebrewDir, int editIdx) {
     if (mon.name.empty()) return false;
     HomebrewMonster copy = mon;
     copy.initBonus    = static_cast<int8_t>(abilityModifier(copy.dexScore));
     copy.fromOnDevice = true;
+    static const uint32_t kCrXp[34] = {
+        10, 25, 50, 100, 200, 450, 700, 1100, 1800, 2300, 2900, 3900, 5000, 5900,
+        7200, 8400, 10000, 11500, 13000, 15000, 18000, 20000, 22000, 25000, 33000,
+        41000, 50000, 62000, 75000, 90000, 105000, 120000, 135000, 155000
+    };
+    copy.xp = kCrXp[std::min<uint8_t>(copy.crIndex, 33)];
     for (auto& act : copy.actions) {
         if (act.attackBonus == -128 && !act.fullDesc.empty()) {
             act.attackBonus = parseAttackBonusFromText(act.fullDesc);
@@ -771,6 +795,21 @@ bool SrdDatabase::saveHomebrewMonster(const HomebrewMonster& mon, const char* ho
     se.category    = CAT_MONSTER;
     se.crOrLevel   = copy.crIndex;
     se.subType     = copy.type;
+
+    if (editIdx >= 0 && static_cast<size_t>(editIdx) < hbMonsters_.size() &&
+        hbMonsters_[static_cast<size_t>(editIdx)].fromOnDevice) {
+        size_t idx = static_cast<size_t>(editIdx);
+        copy.id     = hbMonsters_[idx].id;
+        se.recordId = copy.id;
+        hbMonsters_[idx] = copy;
+        for (auto& entry : hbSearchEntries_) {
+            if (entry.category == CAT_MONSTER && entry.recordId == copy.id) {
+                entry = se;
+                break;
+            }
+        }
+        return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
+    }
 
     for (size_t i = 0; i < hbSearchEntries_.size(); ++i) {
         if (hbSearchEntries_[i].category == CAT_MONSTER &&
@@ -795,7 +834,7 @@ bool SrdDatabase::saveHomebrewMonster(const HomebrewMonster& mon, const char* ho
     return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
 }
 
-bool SrdDatabase::saveHomebrewSpell(const HomebrewSpell& sp, const char* homebrewDir) {
+bool SrdDatabase::saveHomebrewSpell(const HomebrewSpell& sp, const char* homebrewDir, int editIdx) {
     if (sp.name.empty()) return false;
     HomebrewSpell copy = sp;
     copy.fromOnDevice = true;
@@ -807,6 +846,21 @@ bool SrdDatabase::saveHomebrewSpell(const HomebrewSpell& sp, const char* homebre
     se.category    = CAT_SPELL;
     se.crOrLevel   = copy.level;
     se.subType     = 0;
+
+    if (editIdx >= 0 && static_cast<size_t>(editIdx) < hbSpells_.size() &&
+        hbSpells_[static_cast<size_t>(editIdx)].fromOnDevice) {
+        size_t idx = static_cast<size_t>(editIdx);
+        copy.id     = hbSpells_[idx].id;
+        se.recordId = copy.id;
+        hbSpells_[idx] = copy;
+        for (auto& entry : hbSearchEntries_) {
+            if (entry.category == CAT_SPELL && entry.recordId == copy.id) {
+                entry = se;
+                break;
+            }
+        }
+        return writeOnDeviceHomebrewFile(homebrewDir, hbMonsters_, hbSpells_);
+    }
 
     for (size_t i = 0; i < hbSearchEntries_.size(); ++i) {
         if (hbSearchEntries_[i].category == CAT_SPELL &&
