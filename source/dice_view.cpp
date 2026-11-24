@@ -114,15 +114,19 @@ static void buildPolyFaces(DieShape shape, std::vector<Face3D>& outFaces) {
         }
         case DIE_D10:
         case DIE_D100: {
-            // Watertight 12-vertex pentagonal trapezohedron matching getFaceNormals(DIE_D10)
+            // Watertight, mathematically planar 12-vertex pentagonal trapezohedron
+            // matching getFaceNormals(DIE_D10) (k = 0.55)
             const float pi = 3.14159265f;
-            const Vec3 topPole{0.0f, 0.0f,  1.05f};
-            const Vec3 botPole{0.0f, 0.0f, -1.05f};
+            const float Req = 0.72f;
+            const float Ze  = 0.125f; // Req * (1 - cos(36deg)) / (2 * 0.55)
+            const float Zp  = 1.184f; // (Req - 0.55 * Ze) / 0.55
+            const Vec3 topPole{0.0f, 0.0f,  Zp};
+            const Vec3 botPole{0.0f, 0.0f, -Zp};
             Vec3 eq[10];
             for (int m = 0; m < 10; ++m) {
                 float th = static_cast<float>(m) * (pi / 5.0f);
-                float ze = (m % 2 == 0) ? 0.20f : -0.20f;
-                eq[m] = {std::cos(th) * 0.96f, std::sin(th) * 0.96f, ze};
+                float ze = (m % 2 == 0) ? -Ze : Ze;
+                eq[m] = {std::cos(th) * Req, std::sin(th) * Req, ze};
             }
             std::vector<Vec3> norms;
             DiceRoller::getFaceNormals(DIE_D10, norms);
@@ -336,7 +340,8 @@ static void drawDieSprite(C2D_TextBuf buf, C2D_SpriteSheet /*sheet*/, const DieB
                 C2D_TextParse(&txt, buf, numStr);
                 C2D_TextOptimize(&txt);
 
-                float baseSc = (drawDiam >= 64.0f) ? 0.62f : (drawDiam >= 48.0f ? 0.50f : 0.42f);
+                float baseSc = (drawDiam >= 64.0f) ? 0.60f : (drawDiam >= 48.0f ? 0.48f : 0.40f);
+                if (die.shape == DIE_D100 || val >= 10) baseSc *= 0.82f;
                 // Foreshorten numeral along the face's 3D tilt so it stays glued to the face
                 float scX = baseSc * std::max(0.28f, 1.0f - std::fabs(df.wn.x) * 0.70f);
                 float scY = baseSc * std::max(0.28f, 1.0f - std::fabs(df.wn.y) * 0.70f);
