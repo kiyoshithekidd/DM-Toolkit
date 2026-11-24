@@ -72,6 +72,8 @@ A DM-only companion app for the Nintendo 3DS (modded 3DS XL). It puts the whole 
 
 ## Changelog
 
+* **v1.5.3:**
+  * Made `d10` and `d100` pentagonal trapezohedron faces mathematically planar (eliminating concave kite folding/self-intersection) and scaled 2-digit `d100` numerals (`00`–`90`) to sit cleanly inside the kite face.
 * **v1.5.2:**
   * Fixed `d6`, `d8`, `d10`, and `d100` 3D mesh face-normal alignment, watertight `d10`/`d100` trapezohedron vertices, and `d6` pip Z-layering so there are zero gaps while rolling and clean `d6` results.
 * **v1.5.1:**
