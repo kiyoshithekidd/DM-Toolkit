@@ -59,6 +59,44 @@ static const uint16_t kXpThresholds[20][4] = {
     {2800, 5700, 8500,12700}  // Lv 20
 };
 
+const char* Generators::timeSlotToString(uint8_t slot) {
+    static const char* kSlots[5] = {"Dawn", "Morning", "Noon", "Dusk", "Night"};
+    if (slot < 5) return kSlots[slot];
+    return "Morning";
+}
+
+const char* Generators::weatherToString(uint8_t weather) {
+    static const char* kWeather[6] = {"Clear", "Overcast", "Light Rain", "Foggy", "High Winds", "Storm"};
+    if (weather < 6) return kWeather[weather];
+    return "Clear";
+}
+
+uint8_t Generators::rollWeather(uint32_t& rngState) {
+    int r = randRange(rngState, 1, 20);
+    if (r <= 8)  return 0; // Clear
+    if (r <= 12) return 1; // Overcast
+    if (r <= 15) return 2; // Light Rain
+    if (r <= 17) return 3; // Foggy
+    if (r <= 19) return 4; // High Winds
+    return 5;              // Storm
+}
+
+float Generators::encounterMultiplier(int totalMonsters, int partySize) {
+    if (totalMonsters <= 0) return 1.0f;
+    static const float kMultSteps[7] = {0.5f, 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
+    int stepIdx = 1; // 1.0x
+    if (totalMonsters >= 15)      stepIdx = 6;
+    else if (totalMonsters >= 11) stepIdx = 5;
+    else if (totalMonsters >= 7)  stepIdx = 4;
+    else if (totalMonsters >= 3)  stepIdx = 3;
+    else if (totalMonsters == 2)  stepIdx = 2;
+    else                          stepIdx = 1;
+
+    if (partySize <= 2)      stepIdx = std::min(6, stepIdx + 1);
+    else if (partySize >= 6) stepIdx = std::max(0, stepIdx - 1);
+    return kMultSteps[stepIdx];
+}
+
 EncounterDifficultyEval Generators::evaluateEncounterDifficulty(const SrdDatabase& db,
                                                                       const SavedEncounter& enc,
                                                                       const std::vector<PartyMember>& party,
@@ -92,21 +130,7 @@ EncounterDifficultyEval Generators::evaluateEncounterDifficulty(const SrdDatabas
         }
     }
 
-    static const float kMultSteps[7] = {0.5f, 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
-    int stepIdx = 1; // 1.0x
-    if (totalMonsters >= 15)      stepIdx = 6;
-    else if (totalMonsters >= 11) stepIdx = 5;
-    else if (totalMonsters >= 7)  stepIdx = 4;
-    else if (totalMonsters >= 3)  stepIdx = 3;
-    else if (totalMonsters == 2)  stepIdx = 2;
-    else                          stepIdx = 1;
-
-    if (totalMonsters > 0) {
-        if (partyCount <= 2)      stepIdx = std::min(6, stepIdx + 1);
-        else if (partyCount >= 6) stepIdx = std::max(0, stepIdx - 1);
-    }
-
-    ev.multiplier = (totalMonsters > 0) ? kMultSteps[stepIdx] : 1.0f;
+    ev.multiplier = encounterMultiplier(totalMonsters, partyCount);
     ev.adjustedXp = static_cast<uint32_t>(static_cast<float>(ev.baseXp) * ev.multiplier + 0.5f);
 
     if (ev.adjustedXp >= ev.deadlyThresh && ev.deadlyThresh > 0)      ev.rating = DIFF_DEADLY;
@@ -134,29 +158,37 @@ SavedEncounter Generators::generateEncounter(const SrdDatabase& db,
                   terrainToString(terrain), difficultyToString(diff), lv);
     enc.name = titleBuf;
 
-    // Collect candidate monsters matching terrain and XP <= budget
+    // Collect candidate monsters (SRD + Homebrew) matching terrain and single-monster adjusted XP <= budget
+    float singleMult = encounterMultiplier(1, ps);
     std::vector<uint16_t> candidates;
     std::vector<uint16_t> fallback;
-    uint32_t count = db.srdMonsterCount();
-    for (uint32_t i = 0; i < count; ++i) {
+    auto considerMonster = [&](uint16_t id) {
         MonsterView mv{};
-        if (!db.getMonster(static_cast<uint16_t>(i), mv)) continue;
-        if (mv.xp == 0 || mv.xp > budget) continue;
-        if (mv.xp * 16 < budget && lv >= 4) continue; // Avoid 50 CR 0 rats at high level
+        if (!db.getMonster(id, mv)) return;
+        if (mv.xp == 0) return;
+        uint32_t adjOne = static_cast<uint32_t>(static_cast<float>(mv.xp) * singleMult + 0.5f);
+        if (adjOne > budget) return;
+        if (mv.xp * 16 < budget && lv >= 4) return; // Avoid 50 CR 0 rats at high level
         if ((mv.terrainMask & terrainBit) != 0) {
             candidates.push_back(mv.id);
         } else {
             fallback.push_back(mv.id);
         }
-    }
+    };
+
+    uint32_t srdCount = db.srdMonsterCount();
+    for (uint32_t i = 0; i < srdCount; ++i) considerMonster(static_cast<uint16_t>(i));
+    uint32_t hbCount = db.homebrewMonsterCount();
+    for (uint32_t i = 0; i < hbCount; ++i) considerMonster(static_cast<uint16_t>(HOMEBREW_MONSTER_ID_BASE + i));
 
     if (candidates.empty()) candidates = std::move(fallback);
     if (candidates.empty()) return enc;
 
-    // Pick 1 primary monster type (and optionally a 2nd support type)
-    uint32_t spent = 0;
+    // Pick 1 primary monster type (and optionally a 2nd support type) using exact SRD encounter multipliers
+    uint32_t baseSpent = 0;
+    int totalCount = 0;
     int attempts = 0;
-    while (enc.slots.size() < 2 && attempts < 12) {
+    while (enc.slots.size() < 2 && attempts < 14) {
         ++attempts;
         uint16_t pickId = candidates[nextRand(rngState) % candidates.size()];
         MonsterView mv{};
@@ -168,21 +200,25 @@ SavedEncounter Generators::generateEncounter(const SrdDatabase& db,
         }
         if (duplicate) continue;
 
-        uint32_t remaining = (budget > spent) ? (budget - spent) : 0;
-        if (mv.xp > remaining && !enc.slots.empty()) continue;
-
-        int maxQty = std::max(1, static_cast<int>(remaining / mv.xp));
-        maxQty = std::min(maxQty, (enc.slots.empty() ? 4 : 2));
+        int maxQty = enc.slots.empty() ? 4 : 2;
         int qty = randRange(rngState, 1, maxQty);
-        // Factor in SRD encounter multiplier (~1.5x for 2 monsters, 2x for 3-6)
-        uint32_t multNum = (qty >= 3) ? 2 : 1;
-        while (qty > 1 && mv.xp * static_cast<uint32_t>(qty) * multNum > remaining + (budget / 4)) {
+        uint32_t cap = budget + (budget / 5);
+        while (qty > 0) {
+            uint32_t newBase = baseSpent + mv.xp * static_cast<uint32_t>(qty);
+            float mult = encounterMultiplier(totalCount + qty, ps);
+            uint32_t adj = static_cast<uint32_t>(static_cast<float>(newBase) * mult + 0.5f);
+            if (adj <= cap || (enc.slots.empty() && qty == 1)) {
+                break;
+            }
             --qty;
         }
+        if (qty <= 0) continue;
 
         enc.slots.push_back({pickId, static_cast<uint8_t>(qty)});
-        spent += mv.xp * static_cast<uint32_t>(qty);
-        if (spent * 4 >= budget * 3) break;
+        baseSpent += mv.xp * static_cast<uint32_t>(qty);
+        totalCount += qty;
+        uint32_t curAdj = static_cast<uint32_t>(static_cast<float>(baseSpent) * encounterMultiplier(totalCount, ps) + 0.5f);
+        if (curAdj * 4 >= budget * 3) break;
     }
 
     return enc;
@@ -299,6 +335,120 @@ GeneratedLoot Generators::generateLoot(const SrdDatabase& db,
                   loot.pp, loot.gp, loot.sp, loot.cp);
     loot.summary = buf;
     return loot;
+}
+
+GeneratedTavern Generators::generateTavern(uint32_t& rngState) {
+    static const char* kAdj[] = {
+        "Gilded", "Rusty", "Weeping", "Drunken", "Silver", "Lantern",
+        "Bramble", "Crooked", "Sunken", "Crimson", "Copper", "Wandering"
+    };
+    static const char* kNoun[] = {
+        "Stag", "Tankard", "Griffin", "Anchor", "Barrel", "Raven",
+        "Hound", "Compass", "Lute", "Hearth", "Boar", "Kettle"
+    };
+    static const char* kVibes[] = {
+        "Warm hearth, lively fiddle music, crowded benches.",
+        "Dimly lit and smoky; regulars eye newcomers quietly.",
+        "Boisterous sailors and merchants trading loud wagers.",
+        "Spotless oak tables, fragrant stew, strict house rules.",
+        "Half-empty with creaking floorboards and cheap ale."
+    };
+    static const char* kSpecialties[] = {
+        "Spiced Mutton Pie & Honey Mead (4 sp)",
+        "Smoked Trout & Dark Dwarven Stout (5 sp)",
+        "Roasted Garlic Bread & Cider (2 sp)",
+        "Peppery Venison Stew & Red Wine (6 sp)",
+        "Warm Herb Biscuits & Ginger Ale (3 sp)"
+    };
+    static const char* kRumors[] = {
+        "Strange blue lights have been seen in the old quarry at dusk.",
+        "A merchant caravan vanished two miles past the stone bridge.",
+        "The watch captain is quietly hiring sell-swords for a cellar job.",
+        "Someone broke into the apothecary and stole only silver dust.",
+        "An abandoned shrine in the woods began ringing its bell at midnight."
+    };
+
+    GeneratedTavern tv;
+    tv.name = std::string("The ") +
+              kAdj[nextRand(rngState) % (sizeof(kAdj) / sizeof(kAdj[0]))] + " " +
+              kNoun[nextRand(rngState) % (sizeof(kNoun) / sizeof(kNoun[0]))];
+    tv.vibe      = kVibes[nextRand(rngState) % (sizeof(kVibes) / sizeof(kVibes[0]))];
+    tv.specialty = kSpecialties[nextRand(rngState) % (sizeof(kSpecialties) / sizeof(kSpecialties[0]))];
+    tv.rumor     = kRumors[nextRand(rngState) % (sizeof(kRumors) / sizeof(kRumors[0]))];
+    return tv;
+}
+
+GeneratedQuestHook Generators::generateQuestHook(uint32_t& rngState) {
+    static const char* kTitles[] = {
+        "The Missing Courier", "Bells Beneath the Marsh", "The Borrowed Relic",
+        "Shadows at Mill Creek", "The Tollbridge Racket", "Ashes of the Old Watch",
+        "The Whispering Cellar", "A Debt in Copper"
+    };
+    static const char* kPatrons[] = {
+        "A frantic guild clerk", "A retired watch sergeant", "A veiled herbalist",
+        "The local blacksmith", "A nervous traveling scholar", "An indebted innkeeper"
+    };
+    static const char* kHooks[] = {
+        "Offers 75 gp to recover a sealed iron strongbox before dawn.",
+        "Pleads for help clearing strange raiders from an old shrine.",
+        "Needs an escort through mist-choked roads before the moon rises.",
+        "Wants a vanished apprentice tracked into the sunken ruins nearby.",
+        "Hires the party to investigate livestock vanishing with no tracks."
+    };
+    static const char* kTwists[] = {
+        "The patron is hiding a personal link to the culprits.",
+        "A rival adventuring crew is already halfway to the prize.",
+        "The monsters were driven here by a bigger threat deeper inside.",
+        "The target object is cursed—or refuses to stay in a bag.",
+        "Local officials are quietly profiting from the trouble."
+    };
+
+    GeneratedQuestHook q;
+    q.title  = kTitles[nextRand(rngState) % (sizeof(kTitles) / sizeof(kTitles[0]))];
+    q.patron = kPatrons[nextRand(rngState) % (sizeof(kPatrons) / sizeof(kPatrons[0]))];
+    q.hook   = kHooks[nextRand(rngState) % (sizeof(kHooks) / sizeof(kHooks[0]))];
+    q.twist  = kTwists[nextRand(rngState) % (sizeof(kTwists) / sizeof(kTwists[0]))];
+    return q;
+}
+
+GeneratedShop Generators::generateShop(const SrdDatabase& db, int partyLevel, uint32_t& rngState) {
+    static const char* kShopNames[] = {
+        "Ironwood Outfitters", "The Brass Lantern Curios", "Hearthstone Armory",
+        "Copperkettle Provisions", "Wayfarer's Pack & Blade", "Old Mill Oddities"
+    };
+    GeneratedShop sh;
+    sh.name = kShopNames[nextRand(rngState) % (sizeof(kShopNames) / sizeof(kShopNames[0]))];
+    GeneratedNpc keeper = generateNpc(rngState);
+    sh.shopkeeper = keeper.name + " (" + keeper.ancestry + ")";
+
+    std::vector<SearchHit> gearHits;
+    db.searchReference("", REF_TAB_GEAR, gearHits, 512);
+    std::vector<uint16_t> mundaneIds;
+    std::vector<uint16_t> magicIds;
+    for (const auto& h : gearHits) {
+        if (h.category == CAT_EQUIPMENT) {
+            if (h.subType == EQ_MAGIC_ITEM) magicIds.push_back(h.recordId);
+            else mundaneIds.push_back(h.recordId);
+        }
+    }
+
+    int mundaneCount = 4;
+    for (int i = 0; i < mundaneCount && !mundaneIds.empty(); ++i) {
+        uint16_t rid = mundaneIds[nextRand(rngState) % mundaneIds.size()];
+        ReferenceView rv{};
+        if (db.getReference(rid, rv)) {
+            sh.stock.push_back(std::string(rv.name) + " - " + rv.subtitle);
+        }
+    }
+    int magicCount = (partyLevel >= 5) ? 2 : 1;
+    for (int i = 0; i < magicCount && !magicIds.empty(); ++i) {
+        uint16_t rid = magicIds[nextRand(rngState) % magicIds.size()];
+        ReferenceView rv{};
+        if (db.getReference(rid, rv)) {
+            sh.stock.push_back(std::string("[Magic] ") + rv.name + " (" + rv.subtitle + ")");
+        }
+    }
+    return sh;
 }
 
 } // namespace dmtk

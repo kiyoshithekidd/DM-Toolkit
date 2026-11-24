@@ -436,6 +436,45 @@ def compile_srd():
         search_entries.append((norm, char_bitmask(norm), rule_id, CAT_RULE, 0, 0))
         rule_id += 1
 
+    # Add DM Screen Quick-Reference Cheat Sheet cards
+    dm_screen_cards = [
+        (
+            "Difficulty Classes (DC)",
+            "Very Easy: DC 5\nEasy: DC 10\nMedium: DC 15\nHard: DC 20\nVery Hard: DC 25\nNearly Impossible: DC 30\n\nPassive Check = 10 + all modifiers (+5 for Advantage, -5 for Disadvantage).",
+        ),
+        (
+            "Cover & Line of Sight",
+            "Half Cover: +2 bonus to AC and Dexterity saving throws (low wall, furniture, creatures).\nThree-Quarters Cover: +5 bonus to AC and Dexterity saving throws (portcullis, arrow slit, thick tree trunk).\nTotal Cover: Cannot be targeted directly by an attack or spell.",
+        ),
+        (
+            "Exhaustion Levels",
+            "1: Disadvantage on ability checks\n2: Speed halved\n3: Disadvantage on attack rolls and saving throws\n4: Hit point maximum halved\n5: Speed reduced to 0\n6: Death\n\nFinishing a long rest reduces exhaustion by 1 level (if food and drink are consumed).",
+        ),
+        (
+            "Light & Vision",
+            "Bright Light: Normal vision.\nDim Light (Lightly Obscured): Disadvantage on Wisdom (Perception) checks relying on sight.\nDarkness (Heavily Obscured): Effectively Blinded.\n\nLight Sources (Bright / Dim):\n- Candle: 5 ft / +5 ft (1 hr)\n- Torch / Light spell: 20 ft / +20 ft (1 hr)\n- Hooded Lantern: 30 ft / +30 ft (6 hr)\n- Bullseye Lantern: 60 ft cone / +60 ft (6 hr)",
+        ),
+        (
+            "Travel Pace",
+            "Fast: 400 ft/min | 4 mph | 30 mi/day (-5 Passive Perception)\nNormal: 300 ft/min | 3 mph | 24 mi/day\nSlow: 200 ft/min | 2 mph | 18 mi/day (Able to use Stealth)\n\nForced March: Beyond 8 hours, DC 10 + 1/hr CON save or gain 1 level of Exhaustion.",
+        ),
+        (
+            "Object AC & HP",
+            "Armor Class by Material:\n- Cloth/Paper/Rope: AC 11\n- Crystal/Glass/Ice: AC 13\n- Wood/Bone: AC 15\n- Stone: AC 17\n- Iron/Steel: AC 19\n- Mithral: AC 21 | Adamantine: AC 23\n\nHit Points (Fragile / Resilient):\n- Tiny (bottle, lock): 2 (1d4) / 5 (2d4)\n- Small (chest, lute): 3 (1d6) / 10 (3d6)\n- Medium (barrel, door): 4 (1d8) / 18 (4d8)\n- Large (cart, window): 5 (1d10) / 27 (5d10)",
+        ),
+        (
+            "Improvised Damage",
+            "1d10: Burned by coals, hit by falling bookcase, pricked by poison needle\n2d10: Struck by lightning, stumbling into a fire pit\n4d10: Hit by falling rubble in a collapsing tunnel, stumbling into acid\n10d10: Crushed by compacting walls, hit by whirling steel blades, wading through lava\n18d10: Submerged in lava, hit by a crashing flying fortress\n24d10: Tumbling into a vortex of fire or crushed in the jaws of a godlike creature",
+        ),
+    ]
+    for dname, dbody in dm_screen_cards:
+        rule_bytes.extend(
+            struct.pack("<HBBIII", rule_id, 0, 0xFF, pool.add(dname), pool.add("DM Screen"), pool.add(dbody))
+        )
+        norm = normalize_search_name(dname)
+        search_entries.append((norm, char_bitmask(norm), rule_id, CAT_RULE, 0, 0))
+        rule_id += 1
+
     # 3. Spells (319)
     spell_id_by_name = {}
     for sidx, sp in enumerate(raw_spells):

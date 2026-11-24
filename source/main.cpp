@@ -302,8 +302,12 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
                 C2D_DrawRectSolid(32.0f, ry + 17.0f, 0.35f, 64.0f * pct, 7.0f, hpCol);
             }
             char hpStr[24];
-            if (dead) {
+            if (c.monsterId == 0xFFFE) {
+                std::snprintf(hpStr, sizeof(hpStr), "LAIR");
+            } else if (dead) {
                 std::snprintf(hpStr, sizeof(hpStr), c.isPlayer ? (c.stabilized ? "STAB" : "DOWN") : "DEAD");
+            } else if (c.tempHp > 0) {
+                std::snprintf(hpStr, sizeof(hpStr), "%d+%d/%d", c.currentHp, c.tempHp, c.maxHp);
             } else {
                 std::snprintf(hpStr, sizeof(hpStr), "%d/%d", c.currentHp, c.maxHp);
             }
@@ -313,6 +317,13 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
             if (c.concentrating) {
                 Rect cb{142.0f, ry + 1.0f, 28.0f, 13.0f};
                 drawButton(buf, cb, "CNC", theme::SPELL_BLUE, theme::GOLD_DARK, theme::WHITE, 0.35f);
+                ++drawn;
+            }
+            if (c.legendMax > 0 && drawn < 2) {
+                char lbuf[8];
+                std::snprintf(lbuf, sizeof(lbuf), "L%u", static_cast<unsigned>(c.legendActions));
+                Rect cb{142.0f - drawn * 29.0f, ry + 1.0f, 28.0f, 13.0f};
+                drawButton(buf, cb, lbuf, theme::AMBER_HDR, theme::GOLD_DARK, theme::WHITE, 0.35f);
                 ++drawn;
             }
             if (c.conditionsMask != 0) {
@@ -346,7 +357,14 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
         }
     } else if (!list.empty()) {
         const Combatant& selC = list[static_cast<size_t>(app.tracker.selectedIndex())];
-        if (!selC.isPlayer) {
+        if (!selC.isPlayer && selC.monsterId == 0xFFFE) {
+            C2D_DrawRectSolid(178.0f, 0.0f, 0.15f, 222.0f, 240.0f, theme::PARCHMENT);
+            C2D_DrawRectSolid(178.0f, 0.0f, 0.2f, 222.0f, 24.0f, theme::AMBER_HDR);
+            drawText(buf, "LAIR ACTION (Init 20)", 186.0f, 4.0f, 0.44f, theme::WHITE);
+            drawText(buf, "Triggers on Initiative 20", 186.0f, 38.0f, 0.40f, theme::INK);
+            drawText(buf, "(losing initiative ties).", 186.0f, 56.0f, 0.40f, theme::INK);
+            drawText(buf, "Tap [Rm] to remove marker.", 186.0f, 84.0f, 0.39f, theme::INK_MUTED);
+        } else if (!selC.isPlayer) {
             MonsterView mv{};
             if (app.db.getMonster(selC.monsterId, mv)) {
                 renderMonsterStatBlock(buf, app.db, mv, 178.0f, 0.0f, 222.0f, 240.0f, app.trackerRightScroll, true);
@@ -366,8 +384,12 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
             const char* hpState = (selC.currentHp <= 0) ? (selC.stabilized ? "STABILIZED" : "DOWN (Death Saves!)")
                                 : (pct <= 0.5f ? "BLOODIED" : "HEALTHY");
 
-            char hpHdr[48];
-            std::snprintf(hpHdr, sizeof(hpHdr), "HP: %d / %d  (%s)", selC.currentHp, selC.maxHp, hpState);
+            char hpHdr[64];
+            if (selC.tempHp > 0) {
+                std::snprintf(hpHdr, sizeof(hpHdr), "HP: %d/%d (+%d Temp)", selC.currentHp, selC.maxHp, selC.tempHp);
+            } else {
+                std::snprintf(hpHdr, sizeof(hpHdr), "HP: %d / %d  (%s)", selC.currentHp, selC.maxHp, hpState);
+            }
             drawText(buf, hpHdr, 186.0f, 58.0f, 0.40f, (selC.currentHp <= 0) ? theme::CRIMSON : theme::INK);
 
             C2D_DrawRectSolid(186.0f, 78.0f, 0.25f, 206.0f, 14.0f, theme::WALNUT_LIGHT);
@@ -385,23 +407,33 @@ void renderTopFight(C2D_TextBuf buf, const AppState& app) {
             } else {
                 drawText(buf, "Use DAMAGE / HEAL below to", 186.0f, 108.0f, 0.40f, theme::INK_MUTED);
                 drawText(buf, "track this player's health.", 186.0f, 126.0f, 0.40f, theme::INK_MUTED);
-                drawText(buf, "Use [Conc] for concentration.", 186.0f, 150.0f, 0.40f, theme::INK_MUTED);
+                drawText(buf, "Cust HP supports Half/x2 & Temp.", 186.0f, 150.0f, 0.38f, theme::INK_MUTED);
             }
         }
     } else {
         C2D_DrawRectSolid(178.0f, 0.0f, 0.15f, 222.0f, 240.0f, theme::PARCHMENT);
         C2D_DrawRectSolid(178.0f, 0.0f, 0.2f, 222.0f, 24.0f, theme::WALNUT);
         drawText(buf, app.campaign.name.c_str(), 186.0f, 4.0f, 0.44f, theme::GOLD_BRIGHT);
+        char worldBuf[64];
+        std::snprintf(worldBuf, sizeof(worldBuf), "Sess #%u | Day %u %s (%s)",
+                      static_cast<unsigned>(app.campaign.sessionNumber),
+                      static_cast<unsigned>(app.campaign.dayNumber),
+                      Generators::timeSlotToString(app.campaign.timeSlot),
+                      Generators::weatherToString(app.campaign.weather));
+        drawText(buf, worldBuf, 184.0f, 29.0f, 0.36f, theme::FELT);
         char lvlBuf[48];
-        std::snprintf(lvlBuf, sizeof(lvlBuf), "Party (Level %u):", static_cast<unsigned>(app.campaign.partyLevel));
-        drawText(buf, lvlBuf, 186.0f, 34.0f, 0.40f, theme::CRIMSON_DARK);
-        float cy = 54.0f;
+        std::snprintf(lvlBuf, sizeof(lvlBuf), "Party Lv %u (%d Active):",
+                      static_cast<unsigned>(app.campaign.partyLevel), app.activePartyCount());
+        drawText(buf, lvlBuf, 184.0f, 45.0f, 0.39f, theme::CRIMSON_DARK);
+        float cy = 63.0f;
         for (const auto& p : app.campaign.party) {
+            if (cy > 224.0f) break;
             char pb[64];
-            std::snprintf(pb, sizeof(pb), "- %.14s (HP %d, AC %u)",
-                          p.name.c_str(), p.maxHp, static_cast<unsigned>(p.ac));
-            drawText(buf, pb, 186.0f, cy, 0.39f, theme::INK);
-            cy += 17.0f;
+            std::snprintf(pb, sizeof(pb), "- %.10s HP%d/%d AC%u PP%u",
+                          p.name.c_str(), p.currentHp, p.maxHp,
+                          static_cast<unsigned>(p.ac), static_cast<unsigned>(p.passivePerception));
+            drawText(buf, pb, 184.0f, cy, 0.36f, p.active ? theme::INK : theme::INK_MUTED);
+            cy += 16.0f;
         }
     }
 }
@@ -521,19 +553,23 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
 
     if (app.toolsSubTab == 0) {
         if (app.encBuilderView) {
-            drawText(buf, "ENCOUNTER PREP BUILDER", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
-            drawText(buf, "Add monsters via [+Prep] in Manual. D-Pad selects.", 10.0f, 32.0f, 0.38f, theme::INK_MUTED);
+            char bhdr[64];
+            if (app.editingEncounterIdx >= 0 && !app.draftEncounter.name.empty()) {
+                std::snprintf(bhdr, sizeof(bhdr), "EDIT ENCOUNTER: %.20s", app.draftEncounter.name.c_str());
+            } else {
+                std::snprintf(bhdr, sizeof(bhdr), "ENCOUNTER PREP BUILDER");
+            }
+            drawText(buf, bhdr, 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
+            drawText(buf, "Add monsters via [+Prep] in Monsters. D-Pad selects.", 10.0f, 32.0f, 0.38f, theme::INK_MUTED);
             if (app.draftEncounter.slots.empty()) {
                 drawText(buf, "Draft encounter is empty.", 10.0f, 70.0f, 0.44f, theme::INK_MUTED);
-                drawText(buf, "Tap [Manual] -> [+Prep] to add monsters.", 10.0f, 94.0f, 0.40f, theme::FELT);
+                drawText(buf, "Tap [Monsters] -> [+Prep] to add monsters.", 10.0f, 94.0f, 0.40f, theme::FELT);
             } else {
-                uint32_t totalXp = 0;
                 float cy = 54.0f;
                 for (size_t i = 0; i < app.draftEncounter.slots.size() && i < 8; ++i) {
                     const auto& s = app.draftEncounter.slots[i];
                     MonsterView mv{};
                     if (app.db.getMonster(s.monsterId, mv)) {
-                        totalXp += mv.xp * static_cast<uint32_t>(s.count);
                         bool sel = (static_cast<int>(i) == app.draftSelectedIdx);
                         char mb[80];
                         std::snprintf(mb, sizeof(mb), "%s%ux %s  (CR %s, %u XP ea)",
@@ -562,9 +598,9 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
         } else {
             drawText(buf, "RANDOM ENCOUNTER GENERATOR", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
             char cfg[80];
-            std::snprintf(cfg, sizeof(cfg), "Party: Lv %u (%zu Heroes)  |  %s  |  %s",
+            std::snprintf(cfg, sizeof(cfg), "Party: Lv %u (%d Active)  |  %s  |  %s",
                           static_cast<unsigned>(app.campaign.partyLevel),
-                          app.campaign.party.size(),
+                          app.activePartyCount(),
                           terrainToString(app.genTerrain),
                           Generators::difficultyToString(app.genDifficulty));
             drawText(buf, cfg, 10.0f, 34.0f, 0.39f, theme::CRIMSON_DARK);
@@ -591,51 +627,170 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
             }
         }
     } else if (app.toolsSubTab == 1) {
-        drawText(buf, "NPC & POST-FIGHT LOOT GENERATORS", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
-        float cy = 34.0f;
-        drawText(buf, "NPC on the Spot:", 10.0f, cy, 0.42f, theme::CRIMSON_DARK); cy += 18.0f;
-        if (app.hasGenNpc) {
-            char nb[80];
-            std::snprintf(nb, sizeof(nb), "%s  (%s %s)",
-                          app.lastGenNpc.name.c_str(), app.lastGenNpc.ancestry.c_str(),
-                          app.lastGenNpc.occupation.c_str());
-            drawText(buf, nb, 14.0f, cy, 0.40f, theme::INK); cy += 16.0f;
-            auto qlines = wrapLines(app.lastGenNpc.quirk, 56);
-            for (const auto& ln : qlines) {
-                drawText(buf, ln.c_str(), 14.0f, cy, 0.38f, theme::INK_MUTED);
-                cy += 14.0f;
+        if (app.genViewMode == 1) {
+            drawText(buf, "TAVERN GENERATOR", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
+            if (!app.hasGenTavern) {
+                drawText(buf, "Tap [Tavern] below to roll a tavern!", 14.0f, 60.0f, 0.42f, theme::INK_MUTED);
+            } else {
+                drawText(buf, app.lastGenTavern.name.c_str(), 12.0f, 36.0f, 0.50f, theme::CRIMSON_DARK);
+                float cy = 62.0f;
+                auto vlines = wrapLines(std::string("Vibe: ") + app.lastGenTavern.vibe, 54);
+                for (const auto& ln : vlines) { drawText(buf, ln.c_str(), 12.0f, cy, 0.39f, theme::INK); cy += 15.0f; }
+                cy += 6.0f;
+                auto slines = wrapLines(std::string("House Special: ") + app.lastGenTavern.specialty, 54);
+                for (const auto& ln : slines) { drawText(buf, ln.c_str(), 12.0f, cy, 0.39f, theme::FELT); cy += 15.0f; }
+                cy += 6.0f;
+                auto rlines = wrapLines(std::string("Overheard Rumor: ") + app.lastGenTavern.rumor, 54);
+                for (const auto& ln : rlines) { drawText(buf, ln.c_str(), 12.0f, cy, 0.39f, theme::SPELL_BLUE); cy += 15.0f; }
             }
-        } else {
-            drawText(buf, "Tap [Roll NPC] below.", 14.0f, cy, 0.40f, theme::INK_MUTED); cy += 18.0f;
-        }
-
-        cy = 114.0f;
-        C2D_DrawRectSolid(8.0f, cy - 6.0f, 0.25f, 384.0f, 1.0f, theme::PARCHMENT_EDGE);
-        drawText(buf, "Treasure & Loot:", 10.0f, cy, 0.42f, theme::CRIMSON_DARK); cy += 18.0f;
-        if (app.hasGenLoot) {
-            drawText(buf, app.lastGenLoot.summary.c_str(), 14.0f, cy, 0.40f, theme::INK); cy += 17.0f;
-            if (!app.lastGenLoot.gemOrArt.empty()) {
-                std::string g = "Gem/Art: " + app.lastGenLoot.gemOrArt;
-                drawText(buf, g.c_str(), 14.0f, cy, 0.39f, theme::INK); cy += 16.0f;
+        } else if (app.genViewMode == 2) {
+            drawText(buf, "QUEST HOOK GENERATOR", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
+            if (!app.hasGenHook) {
+                drawText(buf, "Tap [Hook] below to roll a quest hook!", 14.0f, 60.0f, 0.42f, theme::INK_MUTED);
+            } else {
+                drawText(buf, app.lastGenHook.title.c_str(), 12.0f, 36.0f, 0.50f, theme::CRIMSON_DARK);
+                float cy = 62.0f;
+                auto plines = wrapLines(std::string("Patron: ") + app.lastGenHook.patron, 54);
+                for (const auto& ln : plines) { drawText(buf, ln.c_str(), 12.0f, cy, 0.39f, theme::FELT); cy += 15.0f; }
+                cy += 6.0f;
+                auto hlines = wrapLines(std::string("Job: ") + app.lastGenHook.hook, 54);
+                for (const auto& ln : hlines) { drawText(buf, ln.c_str(), 12.0f, cy, 0.39f, theme::INK); cy += 15.0f; }
+                cy += 6.0f;
+                auto tlines = wrapLines(std::string("DM Twist: ") + app.lastGenHook.twist, 54);
+                for (const auto& ln : tlines) { drawText(buf, ln.c_str(), 12.0f, cy, 0.39f, theme::COND_BADGE); cy += 15.0f; }
             }
-            for (const auto& it : app.lastGenLoot.items) {
-                auto ilines = wrapLines(std::string("- ") + it, 56);
-                for (const auto& ln : ilines) {
-                    if (cy < 228.0f) {
-                        drawText(buf, ln.c_str(), 14.0f, cy, 0.38f, theme::SPELL_BLUE);
-                        cy += 14.5f;
+        } else if (app.genViewMode == 3) {
+            drawText(buf, "SHOP INVENTORY GENERATOR", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
+            if (!app.hasGenShop) {
+                drawText(buf, "Tap [Shop] below to roll a shop!", 14.0f, 60.0f, 0.42f, theme::INK_MUTED);
+            } else {
+                drawText(buf, app.lastGenShop.name.c_str(), 12.0f, 34.0f, 0.48f, theme::CRIMSON_DARK);
+                std::string kp = "Keeper: " + app.lastGenShop.shopkeeper;
+                drawText(buf, kp.c_str(), 12.0f, 56.0f, 0.39f, theme::FELT);
+                C2D_DrawRectSolid(8.0f, 74.0f, 0.25f, 384.0f, 1.0f, theme::PARCHMENT_EDGE);
+                float cy = 80.0f;
+                for (const auto& item : app.lastGenShop.stock) {
+                    auto ilines = wrapLines(std::string("- ") + item, 55);
+                    for (const auto& ln : ilines) {
+                        if (cy < 228.0f) {
+                            drawText(buf, ln.c_str(), 12.0f, cy, 0.38f,
+                                     (item.rfind("[Magic]", 0) == 0) ? theme::SPELL_BLUE : theme::INK);
+                            cy += 14.5f;
+                        }
                     }
                 }
             }
         } else {
-            drawText(buf, "Tap [Pocket Loot] or [Hoard Loot] below.", 14.0f, cy, 0.40f, theme::INK_MUTED);
+            drawText(buf, "NPC & POST-FIGHT LOOT GENERATORS", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
+            float cy = 34.0f;
+            drawText(buf, "NPC on the Spot:", 10.0f, cy, 0.42f, theme::CRIMSON_DARK); cy += 18.0f;
+            if (app.hasGenNpc) {
+                char nb[80];
+                std::snprintf(nb, sizeof(nb), "%s  (%s %s)",
+                              app.lastGenNpc.name.c_str(), app.lastGenNpc.ancestry.c_str(),
+                              app.lastGenNpc.occupation.c_str());
+                drawText(buf, nb, 14.0f, cy, 0.40f, theme::INK); cy += 16.0f;
+                auto qlines = wrapLines(app.lastGenNpc.quirk, 56);
+                for (const auto& ln : qlines) {
+                    drawText(buf, ln.c_str(), 14.0f, cy, 0.38f, theme::INK_MUTED);
+                    cy += 14.0f;
+                }
+            } else {
+                drawText(buf, "Tap [NPC] below (Save NPC adds to Campaign).", 14.0f, cy, 0.39f, theme::INK_MUTED); cy += 18.0f;
+            }
+
+            cy = 114.0f;
+            C2D_DrawRectSolid(8.0f, cy - 6.0f, 0.25f, 384.0f, 1.0f, theme::PARCHMENT_EDGE);
+            drawText(buf, "Treasure & Loot:", 10.0f, cy, 0.42f, theme::CRIMSON_DARK); cy += 18.0f;
+            if (app.hasGenLoot) {
+                drawText(buf, app.lastGenLoot.summary.c_str(), 14.0f, cy, 0.40f, theme::INK); cy += 17.0f;
+                if (!app.lastGenLoot.gemOrArt.empty()) {
+                    std::string g = "Gem/Art: " + app.lastGenLoot.gemOrArt;
+                    drawText(buf, g.c_str(), 14.0f, cy, 0.39f, theme::INK); cy += 16.0f;
+                }
+                for (const auto& it : app.lastGenLoot.items) {
+                    auto ilines = wrapLines(std::string("- ") + it, 56);
+                    for (const auto& ln : ilines) {
+                        if (cy < 228.0f) {
+                            drawText(buf, ln.c_str(), 14.0f, cy, 0.38f, theme::SPELL_BLUE);
+                            cy += 14.5f;
+                        }
+                    }
+                }
+            } else {
+                drawText(buf, "Tap [Pocket] or [Hoard] below.", 14.0f, cy, 0.40f, theme::INK_MUTED);
+            }
         }
     } else if (app.toolsSubTab == 2) {
+        char chdr[64];
+        std::snprintf(chdr, sizeof(chdr), "CAMPAIGN LOG: %.24s", app.campaign.name.c_str());
+        drawText(buf, chdr, 8.0f, 5.0f, 0.45f, theme::GOLD_BRIGHT);
+
+        char worldBar[80];
+        std::snprintf(worldBar, sizeof(worldBar), "Session #%u  |  Day %u (%s)  |  Weather: %s",
+                      static_cast<unsigned>(app.campaign.sessionNumber),
+                      static_cast<unsigned>(app.campaign.dayNumber),
+                      Generators::timeSlotToString(app.campaign.timeSlot),
+                      Generators::weatherToString(app.campaign.weather));
+        drawText(buf, worldBar, 10.0f, 32.0f, 0.39f, theme::FELT);
+        C2D_DrawRectSolid(8.0f, 50.0f, 0.25f, 384.0f, 1.0f, theme::PARCHMENT_EDGE);
+
+        if (app.campJournalMode == 0) {
+            char nhdr[48];
+            std::snprintf(nhdr, sizeof(nhdr), "Session Notes (%zu):", app.campaign.notes.size());
+            drawText(buf, nhdr, 10.0f, 55.0f, 0.40f, theme::CRIMSON_DARK);
+            if (app.campaign.notes.empty()) {
+                drawText(buf, "No session notes yet. Tap [+ Note] below.", 12.0f, 84.0f, 0.40f, theme::INK_MUTED);
+            } else {
+                int sel = std::clamp(app.campNoteCursor, 0, static_cast<int>(app.campaign.notes.size()) - 1);
+                int start = std::max(0, sel - 3);
+                float cy = 76.0f;
+                for (int i = start; i < static_cast<int>(app.campaign.notes.size()) && cy < 224.0f; ++i) {
+                    const auto& n = app.campaign.notes[static_cast<size_t>(i)];
+                    char prefix[20];
+                    std::snprintf(prefix, sizeof(prefix), "%s[S%u] ", (i == sel ? "> " : "  "), static_cast<unsigned>(n.sessionNum));
+                    auto lines = wrapLines(std::string(prefix) + n.text, 54);
+                    for (const auto& ln : lines) {
+                        if (cy < 226.0f) {
+                            drawText(buf, ln.c_str(), 10.0f, cy, 0.38f, (i == sel) ? theme::CRIMSON : theme::INK);
+                            cy += 14.5f;
+                        }
+                    }
+                    cy += 3.0f;
+                }
+            }
+        } else {
+            char npchdr[48];
+            std::snprintf(npchdr, sizeof(npchdr), "Saved Campaign NPCs (%zu):", app.campaign.savedNpcs.size());
+            drawText(buf, npchdr, 10.0f, 55.0f, 0.40f, theme::CRIMSON_DARK);
+            if (app.campaign.savedNpcs.empty()) {
+                drawText(buf, "No saved NPCs yet.", 12.0f, 84.0f, 0.40f, theme::INK_MUTED);
+                drawText(buf, "Roll an NPC in [Gen] and tap [Save NPC].", 12.0f, 104.0f, 0.39f, theme::FELT);
+            } else {
+                int sel = std::clamp(app.campNpcCursor, 0, static_cast<int>(app.campaign.savedNpcs.size()) - 1);
+                const auto& npc = app.campaign.savedNpcs[static_cast<size_t>(sel)];
+                char idxStr[64];
+                std::snprintf(idxStr, sizeof(idxStr), "(%d/%zu) %s", sel + 1, app.campaign.savedNpcs.size(), npc.name.c_str());
+                drawText(buf, idxStr, 12.0f, 78.0f, 0.46f, theme::INK);
+                std::string role = npc.ancestry + " " + npc.occupation;
+                drawText(buf, role.c_str(), 12.0f, 102.0f, 0.40f, theme::SPELL_BLUE);
+                float cy = 124.0f;
+                auto qlines = wrapLines(std::string("Quirk: ") + npc.quirk, 54);
+                for (const auto& ln : qlines) { drawText(buf, ln.c_str(), 12.0f, cy, 0.39f, theme::INK); cy += 15.0f; }
+                if (!npc.note.empty()) {
+                    cy += 6.0f;
+                    auto nlines = wrapLines(std::string("DM Note: ") + npc.note, 54);
+                    for (const auto& ln : nlines) { drawText(buf, ln.c_str(), 12.0f, cy, 0.39f, theme::FELT); cy += 15.0f; }
+                }
+            }
+        }
+    } else if (app.toolsSubTab == 3) {
         drawText(buf, "ON-DEVICE HOMEBREW CREATOR", 8.0f, 5.0f, 0.46f, theme::GOLD_BRIGHT);
-        char typeHdr[64];
-        std::snprintf(typeHdr, sizeof(typeHdr), "Draft %s  (sdmc:/3ds/DM_Toolkit/homebrew/)",
+        char typeHdr[72];
+        std::snprintf(typeHdr, sizeof(typeHdr), "%s %s  (sdmc:/3ds/DM_Toolkit/homebrew/)",
+                      (app.hbEditIdx >= 0 ? "Editing" : "New"),
                       app.hbIsSpell ? "Spell" : "Monster");
-        drawText(buf, typeHdr, 10.0f, 32.0f, 0.38f, theme::INK_MUTED);
+        drawText(buf, typeHdr, 10.0f, 32.0f, 0.38f, (app.hbEditIdx >= 0) ? theme::FELT : theme::INK_MUTED);
 
         char nameBuf[64];
         std::snprintf(nameBuf, sizeof(nameBuf), "Name: %.36s", app.hbName.c_str());
@@ -668,8 +823,11 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
                       static_cast<unsigned>(app.db.homebrewMonsterCount()),
                       static_cast<unsigned>(app.db.homebrewSpellCount()));
         drawText(buf, cntBuf, 10.0f, 216.0f, 0.38f, theme::INK_MUTED);
-    } else if (app.toolsSubTab == 5) {
+    } else if (app.toolsSubTab == 5 && app.showLegalInfo) {
         drawText(buf, "CREDITS & OPEN CONTENT LICENSE (CC-BY-4.0)", 8.0f, 5.0f, 0.44f, theme::GOLD_BRIGHT);
+        char verLine[64];
+        std::snprintf(verLine, sizeof(verLine), "DM's Toolkit %s  |  SRD 5.1 under CC-BY-4.0", APP_VERSION);
+        drawText(buf, verLine, 10.0f, 32.0f, 0.40f, theme::CRIMSON_DARK);
         const char* legal =
             "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") "
             "by Wizards of the Coast LLC and available at "
@@ -679,9 +837,9 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
             "SD Card Homebrew Overlay:\n"
             "Drop custom JSON packs into sdmc:/3ds/DM_Toolkit/homebrew/ or create them in [Brew].";
         auto lines = wrapLines(legal, 56);
-        float cy = 36.0f;
+        float cy = 52.0f;
         for (const auto& ln : lines) {
-            drawText(buf, ln.c_str(), 10.0f, cy, 0.39f, theme::INK);
+            drawText(buf, ln.c_str(), 10.0f, cy, 0.38f, theme::INK);
             cy += 14.0f;
         }
     } else {
@@ -695,22 +853,23 @@ void renderTopTools(C2D_TextBuf buf, const AppState& app) {
         for (size_t i = 0; i < app.campaign.party.size(); ++i) {
             const auto& p = app.campaign.party[i];
             char pb[96];
-            std::snprintf(pb, sizeof(pb), "%s%.11s (Lv%u %.6s) AC%u HP%d %+d%s",
+            std::snprintf(pb, sizeof(pb), "%s%.10s Lv%u %.5s AC%u HP%d/%d PP%u %+d%s",
                           (static_cast<int>(i) == app.partySelectedIdx ? "> " : "  "),
                           p.name.c_str(), static_cast<unsigned>(p.level), p.className.c_str(),
-                          static_cast<unsigned>(p.ac), p.maxHp, static_cast<int>(p.initBonus),
-                          p.active ? "" : " [BENCH]");
-            drawText(buf, pb, 10.0f, cy, 0.38f,
+                          static_cast<unsigned>(p.ac), p.currentHp, p.maxHp,
+                          static_cast<unsigned>(p.passivePerception), static_cast<int>(p.initBonus),
+                          p.active ? "" : " [B]");
+            drawText(buf, pb, 10.0f, cy, 0.37f,
                      !p.active ? theme::INK_MUTED : ((static_cast<int>(i) == app.partySelectedIdx) ? theme::CRIMSON : theme::INK));
             cy += 16.5f;
         }
 
         char stats[96];
-        std::snprintf(stats, sizeof(stats), "SRD: %u Mon, %u Spl, %u Refs | %zu Campaigns",
+        std::snprintf(stats, sizeof(stats), "SRD: %u Mon, %u Spl, %u Refs | %zu Campaigns | %s",
                       static_cast<unsigned>(app.db.monsterCount()),
                       static_cast<unsigned>(app.db.spellCount()),
                       static_cast<unsigned>(app.db.refCount()),
-                      app.campaigns.size());
+                      app.campaigns.size(), APP_VERSION);
         drawText(buf, stats, 10.0f, 216.0f, 0.38f, theme::INK_MUTED);
     }
 }
@@ -810,8 +969,10 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
         for (int i = 0; i < 3; ++i) {
             int idx = page * 3 + i;
             if (idx >= totalEnc) break;
-            drawButton(buf, Rect{8.0f, y, 304.0f, 38.0f}, app.campaign.encounters[static_cast<size_t>(idx)].name.c_str(),
-                       theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.44f);
+            drawButton(buf, Rect{8.0f, y, 224.0f, 38.0f}, app.campaign.encounters[static_cast<size_t>(idx)].name.c_str(),
+                       theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.42f);
+            drawButton(buf, Rect{236.0f, y, 38.0f, 38.0f}, "Ed", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.39f);
+            drawButton(buf, Rect{278.0f, y, 34.0f, 38.0f}, "X", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.40f);
             y += 44.0f;
         }
         drawButton(buf, Rect{8.0f, 190.0f, 148.0f, 40.0f}, "+ Pick Monster", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.42f);
@@ -838,11 +999,18 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
     }
 
     if (app.fightPanel == FIGHT_PANEL_END_CONFIRM) {
-        drawText(buf, "End this fight and clear the tracker?", 20.0f, 58.0f, 0.46f, theme::PARCHMENT);
-        drawText(buf, "(Your campaign & party stay saved.)", 36.0f, 82.0f, 0.40f, theme::PARCHMENT_ALT);
-        drawButton(buf, Rect{12.0f, 118.0f, 94.0f, 46.0f}, "Cancel", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::WHITE, 0.42f);
-        drawButton(buf, Rect{113.0f, 118.0f, 94.0f, 46.0f}, "Roll Loot", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.42f);
-        drawButton(buf, Rect{214.0f, 118.0f, 94.0f, 46.0f}, "End Fight", theme::CRIMSON, theme::GOLD, theme::WHITE, 0.42f);
+        drawText(buf, "End this fight and clear the tracker?", 20.0f, 48.0f, 0.46f, theme::PARCHMENT);
+        uint32_t defeatedXp = app.tracker.computeDefeatedXp(app.db);
+        int activeCount = app.activePartyCount();
+        char xpSum[64];
+        std::snprintf(xpSum, sizeof(xpSum), "Defeated XP: %u  (%u XP / hero)",
+                      static_cast<unsigned>(defeatedXp),
+                      static_cast<unsigned>(defeatedXp / static_cast<uint32_t>(activeCount)));
+        drawTextCentered(buf, xpSum, Rect{12.0f, 76.0f, 296.0f, 20.0f}, 0.42f, theme::GOLD_BRIGHT);
+        drawText(buf, "(Party HP & campaign stay saved.)", 42.0f, 100.0f, 0.39f, theme::PARCHMENT_ALT);
+        drawButton(buf, Rect{12.0f, 128.0f, 94.0f, 46.0f}, "Cancel", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::WHITE, 0.42f);
+        drawButton(buf, Rect{113.0f, 128.0f, 94.0f, 46.0f}, "Roll Loot", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.42f);
+        drawButton(buf, Rect{214.0f, 128.0f, 94.0f, 46.0f}, "End Fight", theme::CRIMSON, theme::GOLD, theme::WHITE, 0.42f);
         return;
     }
 
@@ -862,31 +1030,51 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
             drawButton(buf, r, keys[i], bg, theme::GOLD_DARK, fg, 0.46f);
         }
 
-        // Right column: typed value display + Apply Damage / Apply Heal
-        char valBuf[16];
-        std::snprintf(valBuf, sizeof(valBuf), "%d", app.customHpValue);
-        drawButton(buf, Rect{194.0f, 50.0f, 120.0f, 46.0f}, valBuf, theme::WALNUT_DARK, theme::GOLD, theme::GOLD_BRIGHT, 0.72f);
-        drawButton(buf, Rect{194.0f, 106.0f, 120.0f, 54.0f}, "- Damage", theme::CRIMSON, theme::GOLD, theme::WHITE, 0.46f);
-        drawButton(buf, Rect{194.0f, 170.0f, 120.0f, 54.0f}, "+ Heal", theme::HP_GOOD, theme::GOLD, theme::WHITE, 0.46f);
+        // Right column: typed value + Half/x2 & Temp HP + Apply Damage / Apply Heal
+        int effectiveVal = (app.customHpMult == 1) ? (app.customHpValue / 2)
+                         : (app.customHpMult == 2) ? (app.customHpValue * 2) : app.customHpValue;
+        char valBuf[24];
+        if (app.customHpMult != 0 && app.customHpValue > 0) {
+            std::snprintf(valBuf, sizeof(valBuf), "%d->%d", app.customHpValue, effectiveVal);
+        } else {
+            std::snprintf(valBuf, sizeof(valBuf), "%d", app.customHpValue);
+        }
+        drawButton(buf, Rect{194.0f, 50.0f, 120.0f, 42.0f}, valBuf, theme::WALNUT_DARK, theme::GOLD, theme::GOLD_BRIGHT,
+                   (app.customHpMult != 0 && app.customHpValue > 0) ? 0.50f : 0.68f);
+
+        const char* multLbl = (app.customHpMult == 1) ? "Half" : (app.customHpMult == 2 ? "x2" : "x1");
+        uint32_t multBg = (app.customHpMult == 1) ? theme::SPELL_BLUE
+                        : (app.customHpMult == 2) ? theme::AMBER_HDR : theme::WALNUT_LIGHT;
+        drawButton(buf, Rect{194.0f, 96.0f,  58.0f, 32.0f}, multLbl, multBg, theme::GOLD_DARK, theme::WHITE, 0.40f);
+        drawButton(buf, Rect{256.0f, 96.0f,  58.0f, 32.0f}, "+Temp", theme::PLAYER_TAG, theme::GOLD_DARK, theme::WHITE, 0.38f);
+        drawButton(buf, Rect{194.0f, 134.0f, 120.0f, 44.0f}, "- Damage", theme::CRIMSON, theme::GOLD, theme::WHITE, 0.44f);
+        drawButton(buf, Rect{194.0f, 184.0f, 120.0f, 44.0f}, "+ Heal", theme::HP_GOOD, theme::GOLD, theme::WHITE, 0.44f);
         return;
     }
 
     const Combatant& c = app.tracker.combatants()[static_cast<size_t>(app.tracker.selectedIndex())];
-    const char* hpStatus = (c.currentHp <= 0) ? (c.isPlayer && c.stabilized ? "STABILIZED" : "DOWN")
-                         : (c.maxHp > 0 && c.currentHp * 2 <= c.maxHp ? "BLOODIED" : "OK");
+    const char* hpStatus = (c.currentHp <= 0) ? (c.isPlayer && c.stabilized ? "STAB" : "DOWN")
+                         : (c.maxHp > 0 && c.currentHp * 2 <= c.maxHp ? "BLOOD" : "OK");
     char selHdr[72];
-    std::snprintf(selHdr, sizeof(selHdr), "%.18s | HP %d/%d (%s)",
-                  c.displayName.c_str(), c.currentHp, c.maxHp, hpStatus);
-    drawText(buf, selHdr, 6.0f, 30.0f, 0.39f, c.isPlayer ? theme::GOLD_BRIGHT : theme::PARCHMENT);
+    if (c.tempHp > 0) {
+        std::snprintf(selHdr, sizeof(selHdr), "%.14s %d+%d/%d",
+                      c.displayName.c_str(), c.currentHp, c.tempHp, c.maxHp);
+    } else {
+        std::snprintf(selHdr, sizeof(selHdr), "%.14s %d/%d (%s)",
+                      c.displayName.c_str(), c.currentHp, c.maxHp, hpStatus);
+    }
+    drawButton(buf, Rect{6.0f,   29.0f, 24.0f, 19.0f}, "<", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.38f);
+    drawTextCentered(buf, selHdr, Rect{32.0f, 29.0f, 256.0f, 18.0f}, 0.38f, c.isPlayer ? theme::GOLD_BRIGHT : theme::PARCHMENT);
+    drawButton(buf, Rect{290.0f, 29.0f, 24.0f, 19.0f}, ">", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.38f);
 
-    drawTextCentered(buf, "DAMAGE", Rect{6.0f, 43.0f, 182.0f, 13.0f}, 0.38f, rgba32(255, 110, 110));
-    drawTextCentered(buf, "HEAL",   Rect{194.0f, 43.0f, 120.0f, 13.0f}, 0.38f, rgba32(110, 225, 135));
+    drawTextCentered(buf, "DAMAGE", Rect{6.0f, 46.0f, 182.0f, 11.0f}, 0.36f, rgba32(255, 110, 110));
+    drawTextCentered(buf, "HEAL",   Rect{194.0f, 46.0f, 120.0f, 11.0f}, 0.36f, rgba32(110, 225, 135));
 
-    drawButton(buf, Rect{6.0f,   56.0f, 58.0f, 38.0f}, "-10", theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.46f);
-    drawButton(buf, Rect{68.0f,  56.0f, 58.0f, 38.0f}, "-5",  theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.46f);
-    drawButton(buf, Rect{130.0f, 56.0f, 58.0f, 38.0f}, "-1",  theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.46f);
-    drawButton(buf, Rect{194.0f, 56.0f, 58.0f, 38.0f}, "+1",  theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.46f);
-    drawButton(buf, Rect{256.0f, 56.0f, 58.0f, 38.0f}, "+5",  theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.46f);
+    drawButton(buf, Rect{6.0f,   58.0f, 58.0f, 36.0f}, "-10", theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.46f);
+    drawButton(buf, Rect{68.0f,  58.0f, 58.0f, 36.0f}, "-5",  theme::CRIMSON, theme::GOLD_DARK, theme::WHITE, 0.46f);
+    drawButton(buf, Rect{130.0f, 58.0f, 58.0f, 36.0f}, "-1",  theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.46f);
+    drawButton(buf, Rect{194.0f, 58.0f, 58.0f, 36.0f}, "+1",  theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.46f);
+    drawButton(buf, Rect{256.0f, 58.0f, 58.0f, 36.0f}, "+5",  theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.46f);
 
     drawButton(buf, Rect{6.0f,   98.0f, 68.0f, 32.0f}, "Cond", theme::COND_BADGE, theme::GOLD_DARK, theme::WHITE, 0.40f);
     drawButton(buf, Rect{78.0f,  98.0f, 58.0f, 32.0f}, c.concentrating ? "Conc*" : "Conc",
@@ -936,8 +1124,20 @@ void renderBottomFight(C2D_TextBuf buf, const AppState& app) {
                    theme::GOLD_DARK, theme::WHITE, 0.38f);
     }
 
-    drawButton(buf, Rect{6.0f,   170.0f, 184.0f, 32.0f}, "NEXT TURN  [A/R]", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.44f);
-    drawButton(buf, Rect{196.0f, 170.0f, 118.0f, 32.0f}, "+ Monster", theme::FELT, theme::GOLD, theme::WHITE, 0.40f);
+    drawButton(buf, Rect{6.0f,   170.0f, 44.0f, 32.0f}, "Prev", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+    drawButton(buf, Rect{54.0f,  170.0f, 134.0f, 32.0f}, "NEXT [A/R]", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.42f);
+    drawButton(buf, Rect{192.0f, 170.0f, 62.0f, 32.0f}, "+ Mon", theme::FELT, theme::GOLD, theme::WHITE, 0.39f);
+    if (!c.isPlayer && c.legendMax > 0) {
+        char laLbl[16];
+        std::snprintf(laLbl, sizeof(laLbl), "LA:%u/%u", static_cast<unsigned>(c.legendActions), static_cast<unsigned>(c.legendMax));
+        drawButton(buf, Rect{258.0f, 170.0f, 56.0f, 32.0f}, laLbl, theme::AMBER_HDR, theme::GOLD, theme::WHITE, 0.37f);
+    } else if (!c.isPlayer && c.rechargeMin > 0) {
+        drawButton(buf, Rect{258.0f, 170.0f, 56.0f, 32.0f},
+                   c.rechargeReady ? "Rch:OK" : "Roll R",
+                   c.rechargeReady ? theme::HP_GOOD : theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.37f);
+    } else {
+        drawButton(buf, Rect{258.0f, 170.0f, 56.0f, 32.0f}, "Lair", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.39f);
+    }
 
     drawButton(buf, Rect{6.0f,   206.0f, 56.0f, 30.0f}, "Undo",
                app.tracker.canUndoHp() ? theme::AMBER_HDR : theme::WALNUT_DARK,
@@ -1130,7 +1330,7 @@ void renderBottomRules(C2D_TextBuf buf, const AppState& app) {
 }
 
 void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
-    const char* sub[6] = {"Enc", "Gen", "Brew", "Party", "Saves", "Legal"};
+    const char* sub[6] = {"Enc", "Gen", "Camp", "Brew", "Party", "Saves"};
     for (int i = 0; i < 6; ++i) {
         Rect r{4.0f + i * 52.0f, 32.0f, 50.0f, 26.0f};
         bool sel = (app.toolsSubTab == i);
@@ -1150,7 +1350,8 @@ void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
             drawButton(buf, Rect{6.0f,   94.0f, 98.0f, 38.0f}, "Qty -1", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.40f);
             drawButton(buf, Rect{111.0f, 94.0f, 98.0f, 38.0f}, "Qty +1", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.40f);
             drawButton(buf, Rect{216.0f, 94.0f, 98.0f, 38.0f}, "Clear", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
-            drawButton(buf, Rect{6.0f,  138.0f, 308.0f, 42.0f}, "Save Encounter to Campaign",
+            drawButton(buf, Rect{6.0f,  138.0f, 308.0f, 42.0f},
+                       app.editingEncounterIdx >= 0 ? "Update Saved Encounter" : "Save Encounter to Campaign",
                        app.draftEncounter.slots.empty() ? theme::WALNUT_DARK : theme::GOLD,
                        theme::WALNUT_DARK,
                        app.draftEncounter.slots.empty() ? theme::INK_MUTED : theme::INK, 0.42f);
@@ -1168,10 +1369,47 @@ void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
                        app.hasGenEncounter ? theme::FELT_LIGHT : theme::WALNUT_DARK, theme::GOLD, theme::WHITE, 0.42f);
         }
     } else if (app.toolsSubTab == 1) {
-        drawButton(buf, Rect{6.0f,   70.0f, 308.0f, 48.0f}, "Roll Random NPC", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.46f);
-        drawButton(buf, Rect{6.0f,  130.0f, 150.0f, 48.0f}, "Pocket Loot", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.42f);
-        drawButton(buf, Rect{164.0f,130.0f, 150.0f, 48.0f}, "Hoard Loot", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.42f);
+        drawButton(buf, Rect{6.0f,   66.0f, 148.0f, 42.0f}, "Roll Random NPC", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.42f);
+        drawButton(buf, Rect{162.0f, 66.0f, 152.0f, 42.0f}, "Save NPC to Camp",
+                   app.hasGenNpc ? theme::FELT_LIGHT : theme::WALNUT_DARK, theme::GOLD,
+                   app.hasGenNpc ? theme::WHITE : theme::INK_MUTED, 0.40f);
+
+        drawButton(buf, Rect{6.0f,  114.0f, 148.0f, 42.0f}, "Pocket Loot", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.42f);
+        drawButton(buf, Rect{162.0f,114.0f, 152.0f, 42.0f}, "Hoard Loot", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.42f);
+
+        drawButton(buf, Rect{6.0f,  164.0f, 98.0f,  42.0f}, "Tavern",
+                   app.genViewMode == 1 ? theme::GOLD : theme::WALNUT_LIGHT, theme::GOLD_DARK,
+                   app.genViewMode == 1 ? theme::INK : theme::PARCHMENT, 0.40f);
+        drawButton(buf, Rect{111.0f,164.0f, 98.0f,  42.0f}, "Quest Hook",
+                   app.genViewMode == 2 ? theme::GOLD : theme::WALNUT_LIGHT, theme::GOLD_DARK,
+                   app.genViewMode == 2 ? theme::INK : theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{216.0f,164.0f, 98.0f,  42.0f}, "Shop",
+                   app.genViewMode == 3 ? theme::GOLD : theme::WALNUT_LIGHT, theme::GOLD_DARK,
+                   app.genViewMode == 3 ? theme::INK : theme::PARCHMENT, 0.40f);
     } else if (app.toolsSubTab == 2) {
+        drawButton(buf, Rect{6.0f,   62.0f, 48.0f, 34.0f}, "Ses-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{58.0f,  62.0f, 48.0f, 34.0f}, "Ses+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{110.0f, 62.0f, 54.0f, 34.0f}, "Day+", theme::FELT_LIGHT, theme::GOLD_DARK, theme::WHITE, 0.38f);
+        drawButton(buf, Rect{168.0f, 62.0f, 66.0f, 34.0f}, "Time+", theme::SPELL_BLUE, theme::GOLD_DARK, theme::WHITE, 0.38f);
+        drawButton(buf, Rect{238.0f, 62.0f, 76.0f, 34.0f}, "Weather", theme::AMBER_HDR, theme::GOLD_DARK, theme::WHITE, 0.38f);
+
+        drawButton(buf, Rect{6.0f,   102.0f, 150.0f, 30.0f}, "Session Notes",
+                   app.campJournalMode == 0 ? theme::GOLD : theme::WALNUT_DARK, theme::GOLD_DARK,
+                   app.campJournalMode == 0 ? theme::INK : theme::PARCHMENT, 0.40f);
+        drawButton(buf, Rect{164.0f, 102.0f, 150.0f, 30.0f}, "Saved NPCs",
+                   app.campJournalMode == 1 ? theme::GOLD : theme::WALNUT_DARK, theme::GOLD_DARK,
+                   app.campJournalMode == 1 ? theme::INK : theme::PARCHMENT, 0.40f);
+
+        drawButton(buf, Rect{6.0f,   138.0f, 64.0f, 36.0f}, "< Prev", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{74.0f,  138.0f, 64.0f, 36.0f}, "Next >", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{142.0f, 138.0f, 104.0f, 36.0f},
+                   app.campJournalMode == 0 ? "+ Add Note" : "Edit Note",
+                   theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.39f);
+        drawButton(buf, Rect{250.0f, 138.0f, 64.0f, 36.0f}, "Del", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
+
+        drawButton(buf, Rect{6.0f,   180.0f, 308.0f, 40.0f}, "Save Campaign Log to SD",
+                   theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.42f);
+    } else if (app.toolsSubTab == 3) {
         drawButton(buf, Rect{6.0f,   62.0f, 100.0f, 26.0f}, "Monster",
                    !app.hbIsSpell ? theme::GOLD : theme::WALNUT_DARK, theme::GOLD_DARK,
                    !app.hbIsSpell ? theme::INK : theme::PARCHMENT, 0.39f);
@@ -1204,30 +1442,33 @@ void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
 
         drawButton(buf, Rect{6.0f, 176.0f, 308.0f, 46.0f}, "Save Homebrew to SD & Reload",
                    theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.44f);
-    } else if (app.toolsSubTab == 3) {
-        drawButton(buf, Rect{6.0f,   62.0f, 72.0f, 32.0f}, "+ Hero", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.39f);
-        drawButton(buf, Rect{82.0f,  62.0f, 74.0f, 32.0f}, "Rename", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.39f);
-        drawButton(buf, Rect{160.0f, 62.0f, 74.0f, 32.0f}, "Class", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.39f);
-        drawButton(buf, Rect{238.0f, 62.0f, 76.0f, 32.0f}, "Import", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.39f);
-
-        drawButton(buf, Rect{6.0f,   98.0f, 48.0f, 32.0f}, "AC-", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
-        drawButton(buf, Rect{58.0f,  98.0f, 48.0f, 32.0f}, "AC+", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.39f);
-        drawButton(buf, Rect{110.0f, 98.0f, 48.0f, 32.0f}, "In-", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
-        drawButton(buf, Rect{162.0f, 98.0f, 48.0f, 32.0f}, "In+", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.39f);
-        drawButton(buf, Rect{214.0f, 98.0f, 48.0f, 32.0f}, "HP-", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
-        drawButton(buf, Rect{266.0f, 98.0f, 48.0f, 32.0f}, "HP+", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.39f);
-
-        drawButton(buf, Rect{6.0f,   134.0f, 48.0f, 32.0f}, "Lv-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.39f);
-        drawButton(buf, Rect{58.0f,  134.0f, 48.0f, 32.0f}, "Lv+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.39f);
-        drawButton(buf, Rect{110.0f, 134.0f, 96.0f, 32.0f}, "Active/Bnc", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.38f);
-        drawButton(buf, Rect{210.0f, 134.0f, 50.0f, 32.0f}, "Rm", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
-        drawButton(buf, Rect{264.0f, 134.0f, 50.0f, 32.0f}, "Save", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.39f);
-
-        drawButton(buf, Rect{6.0f,   172.0f, 74.0f, 30.0f}, "PtyLv-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
-        drawButton(buf, Rect{84.0f,  172.0f, 74.0f, 30.0f}, "PtyLv+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
-        drawButton(buf, Rect{162.0f, 172.0f, 152.0f, 30.0f}, "Save Campaign SD", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.39f);
-        drawText(buf, "JSONs: sdmc:/3ds/DM_Toolkit/party/", 8.0f, 208.0f, 0.38f, theme::PARCHMENT_ALT);
     } else if (app.toolsSubTab == 4) {
+        drawButton(buf, Rect{6.0f,   62.0f, 72.0f, 30.0f}, "+ Hero", theme::FELT_LIGHT, theme::GOLD, theme::WHITE, 0.39f);
+        drawButton(buf, Rect{82.0f,  62.0f, 74.0f, 30.0f}, "Rename", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.39f);
+        drawButton(buf, Rect{160.0f, 62.0f, 74.0f, 30.0f}, "Class", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.39f);
+        drawButton(buf, Rect{238.0f, 62.0f, 76.0f, 30.0f}, "Import", theme::SPELL_BLUE, theme::GOLD, theme::WHITE, 0.39f);
+
+        drawButton(buf, Rect{6.0f,   96.0f, 48.0f, 30.0f}, "AC-", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
+        drawButton(buf, Rect{58.0f,  96.0f, 48.0f, 30.0f}, "AC+", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.39f);
+        drawButton(buf, Rect{110.0f, 96.0f, 48.0f, 30.0f}, "In-", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
+        drawButton(buf, Rect{162.0f, 96.0f, 48.0f, 30.0f}, "In+", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.39f);
+        drawButton(buf, Rect{214.0f, 96.0f, 48.0f, 30.0f}, "HP-", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.39f);
+        drawButton(buf, Rect{266.0f, 96.0f, 48.0f, 30.0f}, "HP+", theme::HP_GOOD, theme::GOLD_DARK, theme::WHITE, 0.39f);
+
+        drawButton(buf, Rect{6.0f,   130.0f, 44.0f, 30.0f}, "Lv-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{54.0f,  130.0f, 44.0f, 30.0f}, "Lv+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{102.0f, 130.0f, 44.0f, 30.0f}, "PP-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{150.0f, 130.0f, 44.0f, 30.0f}, "PP+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.38f);
+        drawButton(buf, Rect{198.0f, 130.0f, 70.0f, 30.0f}, "Act/Bnc", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::GOLD_BRIGHT, 0.38f);
+        drawButton(buf, Rect{272.0f, 130.0f, 42.0f, 30.0f}, "Rm", theme::CRIMSON_DARK, theme::GOLD_DARK, theme::WHITE, 0.38f);
+
+        drawButton(buf, Rect{6.0f,   164.0f, 76.0f, 32.0f}, "Short Rest", theme::FELT_LIGHT, theme::GOLD_DARK, theme::WHITE, 0.37f);
+        drawButton(buf, Rect{86.0f,  164.0f, 76.0f, 32.0f}, "Long Rest", theme::HP_GOOD, theme::GOLD, theme::WHITE, 0.37f);
+        drawButton(buf, Rect{166.0f, 164.0f, 46.0f, 32.0f}, "PLv-", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.37f);
+        drawButton(buf, Rect{216.0f, 164.0f, 46.0f, 32.0f}, "PLv+", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.37f);
+        drawButton(buf, Rect{266.0f, 164.0f, 48.0f, 32.0f}, "Save", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.38f);
+        drawText(buf, "JSONs: sdmc:/3ds/DM_Toolkit/party/", 8.0f, 204.0f, 0.38f, theme::PARCHMENT_ALT);
+    } else {
         int totalCamps = static_cast<int>(app.campaigns.size());
         int totalPages = std::max(1, (totalCamps + 2) / 3);
         int page = std::clamp(app.campaignListPage, 0, totalPages - 1);
@@ -1242,24 +1483,28 @@ void renderBottomTools(C2D_TextBuf buf, const AppState& app) {
             y += 35.0f;
         }
         if (totalPages > 1) {
-            drawButton(buf, Rect{6.0f,   174.0f, 32.0f, 40.0f}, "<", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
-            drawButton(buf, Rect{42.0f,  174.0f, 32.0f, 40.0f}, ">", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
-            drawButton(buf, Rect{78.0f,  174.0f, 114.0f, 40.0f}, "+ New", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.40f);
-            drawButton(buf, Rect{196.0f, 174.0f, 118.0f, 40.0f},
-                       app.soundEnabled ? "Sound: ON" : "Sound: OFF",
+            drawButton(buf, Rect{6.0f,   174.0f, 28.0f, 40.0f}, "<", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+            drawButton(buf, Rect{38.0f,  174.0f, 28.0f, 40.0f}, ">", theme::WALNUT_LIGHT, theme::GOLD_DARK, theme::PARCHMENT, 0.40f);
+            drawButton(buf, Rect{70.0f,  174.0f, 82.0f, 40.0f}, "+ New", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.39f);
+            drawButton(buf, Rect{156.0f, 174.0f, 94.0f, 40.0f},
+                       app.soundEnabled ? "Sound:ON" : "Sound:OFF",
                        app.soundEnabled ? theme::HP_GOOD : theme::CRIMSON_DARK,
-                       theme::GOLD, theme::WHITE, 0.40f);
+                       theme::GOLD, theme::WHITE, 0.38f);
+            drawButton(buf, Rect{254.0f, 174.0f, 60.0f, 40.0f},
+                       app.showLegalInfo ? "Back" : "Legal",
+                       app.showLegalInfo ? theme::GOLD : theme::WALNUT_LIGHT,
+                       theme::GOLD_DARK, app.showLegalInfo ? theme::INK : theme::PARCHMENT, 0.38f);
         } else {
-            drawButton(buf, Rect{6.0f,   174.0f, 180.0f, 40.0f}, "+ New Campaign", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.40f);
-            drawButton(buf, Rect{192.0f, 174.0f, 122.0f, 40.0f},
+            drawButton(buf, Rect{6.0f,   174.0f, 134.0f, 40.0f}, "+ New Campaign", theme::GOLD, theme::WALNUT_DARK, theme::INK, 0.39f);
+            drawButton(buf, Rect{144.0f, 174.0f, 106.0f, 40.0f},
                        app.soundEnabled ? "Sound: ON" : "Sound: OFF",
                        app.soundEnabled ? theme::HP_GOOD : theme::CRIMSON_DARK,
-                       theme::GOLD, theme::WHITE, 0.40f);
+                       theme::GOLD, theme::WHITE, 0.38f);
+            drawButton(buf, Rect{254.0f, 174.0f, 60.0f, 40.0f},
+                       app.showLegalInfo ? "Back" : "Legal",
+                       app.showLegalInfo ? theme::GOLD : theme::WALNUT_LIGHT,
+                       theme::GOLD_DARK, app.showLegalInfo ? theme::INK : theme::PARCHMENT, 0.38f);
         }
-    } else {
-        drawText(buf, "DM's Toolkit v1.2", 10.0f, 80.0f, 0.48f, theme::GOLD_BRIGHT);
-        drawText(buf, "SRD 5.1 under CC-BY-4.0", 10.0f, 108.0f, 0.42f, theme::PARCHMENT);
-        drawText(buf, "See top screen for full legal notice.", 10.0f, 134.0f, 0.40f, theme::PARCHMENT_ALT);
     }
 }
 
@@ -1402,12 +1647,15 @@ int main(int argc, char** argv) {
             if (kDown & KEY_DUP && app.tracker.isInCombat()) {
                 app.tracker.setSelectedIndex(app.tracker.selectedIndex() - 1);
                 app.trackerRightScroll = 0;
+                app.fightActionIdx = 0;
             } else if (kDown & KEY_DDOWN && app.tracker.isInCombat()) {
                 app.tracker.setSelectedIndex(app.tracker.selectedIndex() + 1);
                 app.trackerRightScroll = 0;
+                app.fightActionIdx = 0;
             } else if (((kDown & KEY_A) || ((kDown & KEY_R) && !app.combatRulesDrawerOpen)) && app.tracker.isInCombat()) {
                 app.tracker.nextTurn();
                 app.trackerRightScroll = 0;
+                app.fightActionIdx = 0;
                 app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                 app.sfx.play(SFX_TAP);
             } else if (kDown & KEY_B) {
@@ -1442,11 +1690,30 @@ int main(int argc, char** argv) {
                         for (int i = 0; i < 3; ++i) {
                             int idx = page * 3 + i;
                             if (idx >= totalEnc) break;
-                            if (Rect{8.0f, y, 304.0f, 38.0f}.contains(tx, ty)) {
+                            if (Rect{8.0f, y, 224.0f, 38.0f}.contains(tx, ty)) {
                                 app.tracker.startEncounter(app.campaign.encounters[static_cast<size_t>(idx)], app.campaign.party, app.db, app.rngState);
+                                app.fightActionIdx = 0;
                                 app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                                 app.sfx.play(SFX_DICE_ROLL);
                                 app.setStatus("Initiative rolled!");
+                                break;
+                            } else if (Rect{236.0f, y, 38.0f, 38.0f}.contains(tx, ty)) {
+                                app.draftEncounter = app.campaign.encounters[static_cast<size_t>(idx)];
+                                app.draftSelectedIdx = 0;
+                                app.editingEncounterIdx = idx;
+                                app.encBuilderView = true;
+                                app.toolsSubTab = 0;
+                                app.mode = MODE_TOOLS;
+                                app.sfx.play(SFX_TAP);
+                                app.setStatus("Loaded encounter into Prep Builder.");
+                                break;
+                            } else if (Rect{278.0f, y, 34.0f, 38.0f}.contains(tx, ty)) {
+                                app.campaign.encounters.erase(app.campaign.encounters.begin() + idx);
+                                if (app.editingEncounterIdx == idx) app.editingEncounterIdx = -1;
+                                else if (app.editingEncounterIdx > idx) --app.editingEncounterIdx;
+                                app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                                app.sfx.play(SFX_TAP);
+                                app.setStatus("Deleted saved encounter.");
                                 break;
                             }
                             y += 44.0f;
@@ -1457,6 +1724,7 @@ int main(int argc, char** argv) {
                     } else if (Rect{164.0f, 190.0f, 148.0f, 40.0f}.contains(tx, ty)) {
                         app.mode = MODE_TOOLS;
                         app.toolsSubTab = 0;
+                        app.encBuilderView = false;
                     }
                 } else if (app.fightPanel == FIGHT_PANEL_CONDITIONS) {
                     for (int i = 0; i < CONDITION_COUNT; ++i) {
@@ -1480,20 +1748,21 @@ int main(int argc, char** argv) {
                         app.fightPanel = FIGHT_PANEL_MAIN;
                     }
                 } else if (app.fightPanel == FIGHT_PANEL_END_CONFIRM) {
-                    if (Rect{12.0f, 118.0f, 94.0f, 46.0f}.contains(tx, ty)) {
+                    if (Rect{12.0f, 128.0f, 94.0f, 46.0f}.contains(tx, ty)) {
                         app.fightPanel = FIGHT_PANEL_MAIN;
-                    } else if (Rect{113.0f, 118.0f, 94.0f, 46.0f}.contains(tx, ty)) {
+                    } else if (Rect{113.0f, 128.0f, 94.0f, 46.0f}.contains(tx, ty)) {
                         syncPartyHpFromTracker(app);
                         app.tracker.clear();
                         app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                         app.lastGenLoot = Generators::generateLoot(app.db, app.campaign.partyLevel, true, app.rngState);
                         app.hasGenLoot  = true;
+                        app.genViewMode = 0;
                         app.fightPanel  = FIGHT_PANEL_MAIN;
                         app.mode        = MODE_TOOLS;
                         app.toolsSubTab = 1;
                         app.sfx.play(SFX_NAT20);
                         app.setStatus("Post-fight loot rolled!");
-                    } else if (Rect{214.0f, 118.0f, 94.0f, 46.0f}.contains(tx, ty)) {
+                    } else if (Rect{214.0f, 128.0f, 94.0f, 46.0f}.contains(tx, ty)) {
                         syncPartyHpFromTracker(app);
                         app.tracker.clear();
                         app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
@@ -1510,36 +1779,53 @@ int main(int argc, char** argv) {
                                 if (app.customHpValue < 100) app.customHpValue = app.customHpValue * 10 + digit;
                             } else if (i == 9) {
                                 app.customHpValue = 0;
+                                app.customHpMult  = 0;
                             } else if (i == 10) {
                                 if (app.customHpValue < 100) app.customHpValue = app.customHpValue * 10;
                             } else {
+                                app.customHpMult = 0;
                                 app.fightPanel = FIGHT_PANEL_MAIN;
                             }
                             app.sfx.play(SFX_TAP);
                             break;
                         }
                     }
-                    if (Rect{194.0f, 106.0f, 120.0f, 54.0f}.contains(tx, ty)) {
-                        if (app.customHpValue > 0) {
+                    int effectiveVal = (app.customHpMult == 1) ? (app.customHpValue / 2)
+                                     : (app.customHpMult == 2) ? (app.customHpValue * 2) : app.customHpValue;
+                    if (Rect{194.0f, 96.0f, 58.0f, 32.0f}.contains(tx, ty)) {
+                        app.customHpMult = (app.customHpMult + 1) % 3;
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{256.0f, 96.0f, 58.0f, 32.0f}.contains(tx, ty)) {
+                        app.tracker.setTempHp(sel, effectiveVal);
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.customHpValue = 0;
+                        app.customHpMult  = 0;
+                        app.fightPanel = FIGHT_PANEL_MAIN;
+                        app.sfx.play(SFX_TAP);
+                        app.setStatus("Updated Temp HP.");
+                    } else if (Rect{194.0f, 134.0f, 120.0f, 44.0f}.contains(tx, ty)) {
+                        if (effectiveVal > 0) {
                             bool wasConc = app.tracker.combatants()[static_cast<size_t>(sel)].concentrating;
-                            app.tracker.applyHpDelta(sel, -app.customHpValue);
+                            app.tracker.applyHpDelta(sel, -effectiveVal);
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                             if (wasConc && app.tracker.combatants()[static_cast<size_t>(sel)].currentHp > 0) {
-                                int dc = CombatTracker::concentrationCheckDc(app.customHpValue);
+                                int dc = CombatTracker::concentrationCheckDc(effectiveVal);
                                 char cmsg[48];
                                 std::snprintf(cmsg, sizeof(cmsg), "CONC CHECK! DC %d CON Save", dc);
                                 app.setStatus(cmsg, 210);
                             }
                         }
                         app.customHpValue = 0;
+                        app.customHpMult  = 0;
                         app.fightPanel = FIGHT_PANEL_MAIN;
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{194.0f, 170.0f, 120.0f, 54.0f}.contains(tx, ty)) {
-                        if (app.customHpValue > 0) {
-                            app.tracker.applyHpDelta(sel, +app.customHpValue);
+                    } else if (Rect{194.0f, 184.0f, 120.0f, 44.0f}.contains(tx, ty)) {
+                        if (effectiveVal > 0) {
+                            app.tracker.applyHpDelta(sel, +effectiveVal);
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                         }
                         app.customHpValue = 0;
+                        app.customHpMult  = 0;
                         app.fightPanel = FIGHT_PANEL_MAIN;
                         app.sfx.play(SFX_TAP);
                     }
@@ -1558,11 +1844,27 @@ int main(int argc, char** argv) {
                         }
                     };
 
-                    if (Rect{6.0f,   56.0f, 58.0f, 38.0f}.contains(tx, ty)) applyHp(-10);
-                    else if (Rect{68.0f,  56.0f, 58.0f, 38.0f}.contains(tx, ty)) applyHp(-5);
-                    else if (Rect{130.0f, 56.0f, 58.0f, 38.0f}.contains(tx, ty)) applyHp(-1);
-                    else if (Rect{194.0f, 56.0f, 58.0f, 38.0f}.contains(tx, ty)) applyHp(+1);
-                    else if (Rect{256.0f, 56.0f, 58.0f, 38.0f}.contains(tx, ty)) applyHp(+5);
+                    if (Rect{6.0f, 29.0f, 24.0f, 19.0f}.contains(tx, ty)) {
+                        int n = static_cast<int>(app.tracker.combatants().size());
+                        if (n > 0) {
+                            app.tracker.setSelectedIndex((sel + n - 1) % n);
+                            app.trackerRightScroll = 0;
+                            app.fightActionIdx = 0;
+                            app.sfx.play(SFX_TAP);
+                        }
+                    } else if (Rect{290.0f, 29.0f, 24.0f, 19.0f}.contains(tx, ty)) {
+                        int n = static_cast<int>(app.tracker.combatants().size());
+                        if (n > 0) {
+                            app.tracker.setSelectedIndex((sel + 1) % n);
+                            app.trackerRightScroll = 0;
+                            app.fightActionIdx = 0;
+                            app.sfx.play(SFX_TAP);
+                        }
+                    } else if (Rect{6.0f,   58.0f, 58.0f, 36.0f}.contains(tx, ty)) applyHp(-10);
+                    else if (Rect{68.0f,  58.0f, 58.0f, 36.0f}.contains(tx, ty)) applyHp(-5);
+                    else if (Rect{130.0f, 58.0f, 58.0f, 36.0f}.contains(tx, ty)) applyHp(-1);
+                    else if (Rect{194.0f, 58.0f, 58.0f, 36.0f}.contains(tx, ty)) applyHp(+1);
+                    else if (Rect{256.0f, 58.0f, 58.0f, 36.0f}.contains(tx, ty)) applyHp(+5);
                     else if (Rect{6.0f,   98.0f, 68.0f, 32.0f}.contains(tx, ty)) app.fightPanel = FIGHT_PANEL_CONDITIONS;
                     else if (Rect{78.0f,  98.0f, 58.0f, 32.0f}.contains(tx, ty)) {
                         app.tracker.toggleConcentration(sel);
@@ -1577,14 +1879,46 @@ int main(int argc, char** argv) {
                     } else if (Rect{224.0f, 98.0f, 90.0f, 32.0f}.contains(tx, ty)) {
                         app.combatRulesDrawerOpen = !app.combatRulesDrawerOpen;
                         app.trackerRightScroll = 0;
-                    } else if (Rect{6.0f, 170.0f, 184.0f, 32.0f}.contains(tx, ty)) {
+                    } else if (Rect{6.0f, 170.0f, 44.0f, 32.0f}.contains(tx, ty)) {
+                        app.tracker.prevTurn();
+                        app.trackerRightScroll = 0;
+                        app.fightActionIdx = 0;
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{54.0f, 170.0f, 134.0f, 32.0f}.contains(tx, ty)) {
                         app.tracker.nextTurn();
                         app.trackerRightScroll = 0;
                         app.fightActionIdx = 0;
                         app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{196.0f, 170.0f, 118.0f, 32.0f}.contains(tx, ty)) {
+                    } else if (Rect{192.0f, 170.0f, 62.0f, 32.0f}.contains(tx, ty)) {
                         app.mode = MODE_MANUAL;
+                    } else if (Rect{258.0f, 170.0f, 56.0f, 32.0f}.contains(tx, ty)) {
+                        const Combatant& cur = app.tracker.combatants()[static_cast<size_t>(sel)];
+                        if (!cur.isPlayer && cur.legendMax > 0) {
+                            app.tracker.useLegendaryAction(sel);
+                            app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                            app.sfx.play(SFX_TAP);
+                        } else if (!cur.isPlayer && cur.rechargeMin > 0) {
+                            if (cur.rechargeReady) {
+                                app.tracker.toggleRechargeReady(sel);
+                                app.setStatus("Recharge ability spent.");
+                                app.sfx.play(SFX_TAP);
+                            } else {
+                                int d6 = app.tracker.rollRecharge(sel, app.rngState);
+                                char rmsg[48];
+                                bool ok = app.tracker.combatants()[static_cast<size_t>(sel)].rechargeReady;
+                                std::snprintf(rmsg, sizeof(rmsg), "Recharge d6 = %d (%s)", d6, ok ? "READY!" : "Not yet");
+                                app.setStatus(rmsg, 150);
+                                app.sfx.play(ok ? SFX_NAT20 : SFX_DICE_ROLL);
+                            }
+                            app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        } else {
+                            app.tracker.addLairAction();
+                            app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                            app.sfx.play(SFX_TAP);
+                            app.setStatus("Lair Action added at Init 20.");
+                        }
                     } else if (Rect{6.0f, 206.0f, 56.0f, 30.0f}.contains(tx, ty)) {
                         if (app.tracker.undoLastHp()) {
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
@@ -1593,6 +1927,7 @@ int main(int argc, char** argv) {
                         }
                     } else if (Rect{66.0f, 206.0f, 68.0f, 30.0f}.contains(tx, ty)) {
                         app.customHpValue = 0;
+                        app.customHpMult  = 0;
                         app.fightPanel = FIGHT_PANEL_CUSTOM_HP;
                     } else if (Rect{138.0f, 206.0f, 80.0f, 30.0f}.contains(tx, ty)) {
                         app.tracker.setAutoSkipDead(!app.tracker.autoSkipDead());
@@ -1650,8 +1985,8 @@ int main(int argc, char** argv) {
                                 }
                                 if (!de.valid) { de.shape = DIE_D6; de.count = 1; de.mod = 0; }
                                 app.diceShape = de.shape;
-                                app.diceCount = std::clamp(de.count, 1, DiceRoller::MAX_POOL_DICE);
-                                app.diceMod   = std::clamp(de.mod, -10, 20);
+                                app.diceCount = std::clamp(de.count, 1, DiceRoller::MAX_LOGICAL_DICE);
+                                app.diceMod   = std::clamp(de.mod, -20, 50);
                                 app.diceAdvMode = ROLL_NORMAL;
                                 app.dice.rollPool(app.diceShape, app.diceCount, app.diceMod, ROLL_NORMAL, app.rngState);
                                 app.sfx.play(SFX_DICE_ROLL);
@@ -1769,12 +2104,76 @@ int main(int argc, char** argv) {
                 app.sfx.play(SFX_TAP);
             }
 
-            // Stylus flick-to-roll gesture (#30)
-            if (tapped && ty > 28.0f) {
+            bool handledDiceBtn = false;
+            if (tapped) {
+                for (int i = 0; i < DIE_SHAPE_COUNT; ++i) {
+                    if (Rect{4.0f + i * 44.5f, 32.0f, 42.0f, 32.0f}.contains(tx, ty)) {
+                        app.diceShape = static_cast<DieShape>(i);
+                        app.dice.rollPool(app.diceShape, app.diceCount, app.diceMod, app.diceAdvMode, app.rngState);
+                        app.sfx.play(SFX_DICE_ROLL);
+                        handledDiceBtn = true;
+                        break;
+                    }
+                }
+                const int presets[5] = {1, 2, 4, 6, 8};
+                if (!handledDiceBtn && Rect{6.0f, 68.0f, 34.0f, 32.0f}.contains(tx, ty)) {
+                    app.diceCount = std::max(1, app.diceCount - 1);
+                    app.sfx.play(SFX_TAP);
+                    handledDiceBtn = true;
+                } else if (!handledDiceBtn && Rect{116.0f, 68.0f, 34.0f, 32.0f}.contains(tx, ty)) {
+                    app.diceCount = std::min(DiceRoller::MAX_POOL_DICE, app.diceCount + 1);
+                    app.sfx.play(SFX_TAP);
+                    handledDiceBtn = true;
+                } else if (!handledDiceBtn) {
+                    for (int i = 0; i < 5; ++i) {
+                        if (Rect{156.0f + i * 32.0f, 68.0f, 30.0f, 32.0f}.contains(tx, ty)) {
+                            app.diceCount = presets[i];
+                            app.sfx.play(SFX_TAP);
+                            handledDiceBtn = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!handledDiceBtn && Rect{6.0f, 104.0f, 44.0f, 32.0f}.contains(tx, ty)) {
+                    app.diceMod = std::max(-10, app.diceMod - 1);
+                    app.sfx.play(SFX_TAP);
+                    handledDiceBtn = true;
+                } else if (!handledDiceBtn && Rect{134.0f, 104.0f, 44.0f, 32.0f}.contains(tx, ty)) {
+                    app.diceMod = std::min(20, app.diceMod + 1);
+                    app.sfx.play(SFX_TAP);
+                    handledDiceBtn = true;
+                } else if (!handledDiceBtn && Rect{186.0f, 104.0f, 128.0f, 32.0f}.contains(tx, ty)) {
+                    app.diceShape = DIE_D20;
+                    app.diceCount = 1;
+                    app.diceAdvMode = static_cast<RollAdvantageMode>((app.diceAdvMode + 1) % 3);
+                    app.sfx.play(SFX_TAP);
+                    handledDiceBtn = true;
+                } else if (!handledDiceBtn && Rect{6.0f, 142.0f, 308.0f, 46.0f}.contains(tx, ty)) {
+                    app.dice.rollPool(app.diceShape, app.diceCount, app.diceMod, app.diceAdvMode, app.rngState);
+                    app.sfx.play(SFX_DICE_ROLL);
+                    handledDiceBtn = true;
+                } else if (!handledDiceBtn && Rect{6.0f, 194.0f, 150.0f, 40.0f}.contains(tx, ty)) {
+                    app.diceSkinIdx = (app.diceSkinIdx + 1) % DICE_SKIN_COUNT;
+                    app.saveUserSettings();
+                    app.sfx.play(SFX_TAP);
+                    handledDiceBtn = true;
+                } else if (!handledDiceBtn && Rect{164.0f, 194.0f, 150.0f, 40.0f}.contains(tx, ty)) {
+                    app.traySkinIdx = (app.traySkinIdx + 1) % TRAY_SKIN_COUNT;
+                    app.saveUserSettings();
+                    app.sfx.play(SFX_TAP);
+                    handledDiceBtn = true;
+                }
+            }
+
+            // Stylus flick-to-roll gesture (#30, #46: only start on non-button touches)
+            if (tapped && ty > 28.0f && !handledDiceBtn) {
                 flickTracking = true;
                 flickStartX = tx; flickStartY = ty;
                 flickLastX  = tx; flickLastY  = ty;
                 flickFrames = 0;
+            } else if (tapped && handledDiceBtn) {
+                flickTracking = false;
             } else if (flickTracking && (kHeld & KEY_TOUCH)) {
                 touchPosition held{};
                 hidTouchRead(&held);
@@ -1792,57 +2191,6 @@ int main(int argc, char** argv) {
                     app.sfx.play(SFX_DICE_ROLL);
                 }
                 flickTracking = false;
-            }
-
-            if (tapped) {
-                for (int i = 0; i < DIE_SHAPE_COUNT; ++i) {
-                    if (Rect{4.0f + i * 44.5f, 32.0f, 42.0f, 32.0f}.contains(tx, ty)) {
-                        app.diceShape = static_cast<DieShape>(i);
-                        app.dice.rollPool(app.diceShape, app.diceCount, app.diceMod, app.diceAdvMode, app.rngState);
-                        app.sfx.play(SFX_DICE_ROLL);
-                        break;
-                    }
-                }
-                const int presets[5] = {1, 2, 4, 6, 8};
-                if (Rect{6.0f, 68.0f, 34.0f, 32.0f}.contains(tx, ty)) {
-                    app.diceCount = std::max(1, app.diceCount - 1);
-                    app.sfx.play(SFX_TAP);
-                } else if (Rect{116.0f, 68.0f, 34.0f, 32.0f}.contains(tx, ty)) {
-                    app.diceCount = std::min(DiceRoller::MAX_POOL_DICE, app.diceCount + 1);
-                    app.sfx.play(SFX_TAP);
-                } else {
-                    for (int i = 0; i < 5; ++i) {
-                        if (Rect{156.0f + i * 32.0f, 68.0f, 30.0f, 32.0f}.contains(tx, ty)) {
-                            app.diceCount = presets[i];
-                            app.sfx.play(SFX_TAP);
-                            break;
-                        }
-                    }
-                }
-
-                if (Rect{6.0f, 104.0f, 44.0f, 32.0f}.contains(tx, ty)) {
-                    app.diceMod = std::max(-10, app.diceMod - 1);
-                    app.sfx.play(SFX_TAP);
-                } else if (Rect{134.0f, 104.0f, 44.0f, 32.0f}.contains(tx, ty)) {
-                    app.diceMod = std::min(20, app.diceMod + 1);
-                    app.sfx.play(SFX_TAP);
-                } else if (Rect{186.0f, 104.0f, 128.0f, 32.0f}.contains(tx, ty)) {
-                    app.diceShape = DIE_D20;
-                    app.diceCount = 1;
-                    app.diceAdvMode = static_cast<RollAdvantageMode>((app.diceAdvMode + 1) % 3);
-                    app.sfx.play(SFX_TAP);
-                } else if (Rect{6.0f, 142.0f, 308.0f, 46.0f}.contains(tx, ty)) {
-                    app.dice.rollPool(app.diceShape, app.diceCount, app.diceMod, app.diceAdvMode, app.rngState);
-                    app.sfx.play(SFX_DICE_ROLL);
-                } else if (Rect{6.0f, 194.0f, 150.0f, 40.0f}.contains(tx, ty)) {
-                    app.diceSkinIdx = (app.diceSkinIdx + 1) % DICE_SKIN_COUNT;
-                    app.saveUserSettings();
-                    app.sfx.play(SFX_TAP);
-                } else if (Rect{164.0f, 194.0f, 150.0f, 40.0f}.contains(tx, ty)) {
-                    app.traySkinIdx = (app.traySkinIdx + 1) % TRAY_SKIN_COUNT;
-                    app.saveUserSettings();
-                    app.sfx.play(SFX_TAP);
-                }
             }
         } else if (app.mode == MODE_RULES) {
             if (kDown & KEY_DUP && app.ruleListCursor > 0) {
@@ -1901,6 +2249,14 @@ int main(int argc, char** argv) {
             if (app.toolsSubTab == 0 && app.encBuilderView) {
                 if (kDown & KEY_DUP && app.draftSelectedIdx > 0) --app.draftSelectedIdx;
                 if (kDown & KEY_DDOWN && app.draftSelectedIdx + 1 < static_cast<int>(app.draftEncounter.slots.size())) ++app.draftSelectedIdx;
+            } else if (app.toolsSubTab == 2) {
+                if (app.campJournalMode == 0) {
+                    if (kDown & KEY_DUP && app.campNoteCursor > 0) --app.campNoteCursor;
+                    if (kDown & KEY_DDOWN && app.campNoteCursor + 1 < static_cast<int>(app.campaign.notes.size())) ++app.campNoteCursor;
+                } else {
+                    if (kDown & KEY_DUP && app.campNpcCursor > 0) --app.campNpcCursor;
+                    if (kDown & KEY_DDOWN && app.campNpcCursor + 1 < static_cast<int>(app.campaign.savedNpcs.size())) ++app.campNpcCursor;
+                }
             } else {
                 if (kDown & KEY_DUP && app.partySelectedIdx > 0) --app.partySelectedIdx;
                 if (kDown & KEY_DDOWN && app.partySelectedIdx + 1 < static_cast<int>(app.campaign.party.size())) ++app.partySelectedIdx;
@@ -1935,19 +2291,31 @@ int main(int argc, char** argv) {
                             }
                         } else if (Rect{216.0f, 94.0f, 98.0f, 38.0f}.contains(tx, ty)) {
                             app.draftEncounter.slots.clear();
+                            app.draftEncounter.name.clear();
                             app.draftSelectedIdx = 0;
+                            app.editingEncounterIdx = -1;
                         } else if (Rect{6.0f, 138.0f, 308.0f, 42.0f}.contains(tx, ty) && !app.draftEncounter.slots.empty()) {
-                            std::string ename = "Custom Encounter";
+                            std::string ename = (app.editingEncounterIdx >= 0 && !app.draftEncounter.name.empty())
+                                                    ? app.draftEncounter.name
+                                                    : std::string("Custom Encounter");
                             if (openSystemKeyboard(ename, 32, "Encounter Name")) {
                                 SavedEncounter toSave = app.draftEncounter;
                                 toSave.name = ename;
-                                app.campaign.encounters.insert(app.campaign.encounters.begin(), toSave);
-                                if (app.campaign.encounters.size() > 32) app.campaign.encounters.resize(32);
+                                if (app.editingEncounterIdx >= 0 &&
+                                    app.editingEncounterIdx < static_cast<int>(app.campaign.encounters.size())) {
+                                    app.campaign.encounters[static_cast<size_t>(app.editingEncounterIdx)] = toSave;
+                                    app.editingEncounterIdx = -1;
+                                    app.setStatus("Updated saved encounter!");
+                                } else {
+                                    app.campaign.encounters.insert(app.campaign.encounters.begin(), toSave);
+                                    if (app.campaign.encounters.size() > 32) app.campaign.encounters.resize(32);
+                                    app.setStatus("Encounter saved to campaign!");
+                                }
                                 app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
-                                app.setStatus("Encounter saved to campaign!");
                             }
                         } else if (Rect{6.0f, 186.0f, 308.0f, 42.0f}.contains(tx, ty) && !app.draftEncounter.slots.empty()) {
                             app.tracker.startEncounter(app.draftEncounter, app.campaign.party, app.db, app.rngState);
+                            app.fightActionIdx = 0;
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                             app.mode = MODE_FIGHT;
                             app.sfx.play(SFX_DICE_ROLL);
@@ -1959,13 +2327,14 @@ int main(int argc, char** argv) {
                         } else if (Rect{164.0f, 94.0f, 150.0f, 38.0f}.contains(tx, ty)) {
                             app.genDifficulty = static_cast<EncounterDifficulty>((app.genDifficulty + 1) % DIFF_COUNT);
                         } else if (Rect{6.0f, 138.0f, 308.0f, 42.0f}.contains(tx, ty)) {
-                            int pSize = std::max(1, static_cast<int>(app.campaign.party.size()));
+                            int pSize = app.activePartyCount();
                             app.lastGenEncounter = Generators::generateEncounter(
                                 app.db, app.campaign.partyLevel, pSize, app.genTerrain, app.genDifficulty, app.rngState);
                             app.hasGenEncounter = !app.lastGenEncounter.slots.empty();
                             app.sfx.play(SFX_DICE_ROLL);
                         } else if (Rect{6.0f, 186.0f, 308.0f, 42.0f}.contains(tx, ty) && app.hasGenEncounter) {
                             app.tracker.startEncounter(app.lastGenEncounter, app.campaign.party, app.db, app.rngState);
+                            app.fightActionIdx = 0;
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                             app.mode = MODE_FIGHT;
                             app.sfx.play(SFX_DICE_ROLL);
@@ -1973,20 +2342,141 @@ int main(int argc, char** argv) {
                         }
                     }
                 } else if (app.toolsSubTab == 1) {
-                    if (Rect{6.0f, 70.0f, 308.0f, 48.0f}.contains(tx, ty)) {
+                    if (Rect{6.0f, 66.0f, 148.0f, 42.0f}.contains(tx, ty)) {
                         app.lastGenNpc = Generators::generateNpc(app.rngState);
                         app.hasGenNpc = true;
+                        app.genViewMode = 0;
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{6.0f, 130.0f, 150.0f, 48.0f}.contains(tx, ty)) {
+                    } else if (Rect{162.0f, 66.0f, 152.0f, 42.0f}.contains(tx, ty) && app.hasGenNpc) {
+                        if (app.campaign.savedNpcs.size() < 48) {
+                            SavedNpc sn;
+                            sn.name       = app.lastGenNpc.name;
+                            sn.ancestry   = app.lastGenNpc.ancestry;
+                            sn.occupation = app.lastGenNpc.occupation;
+                            sn.quirk      = app.lastGenNpc.quirk;
+                            app.campaign.savedNpcs.insert(app.campaign.savedNpcs.begin(), sn);
+                            app.campNpcCursor = 0;
+                            app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                            app.sfx.play(SFX_NAT20);
+                            app.setStatus("Saved NPC to Campaign Log!");
+                        } else {
+                            app.setStatus("Saved NPC list full (48 max).");
+                        }
+                    } else if (Rect{6.0f, 114.0f, 148.0f, 42.0f}.contains(tx, ty)) {
                         app.lastGenLoot = Generators::generateLoot(app.db, app.campaign.partyLevel, false, app.rngState);
                         app.hasGenLoot = true;
+                        app.genViewMode = 0;
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{164.0f, 130.0f, 150.0f, 48.0f}.contains(tx, ty)) {
+                    } else if (Rect{162.0f, 114.0f, 152.0f, 42.0f}.contains(tx, ty)) {
                         app.lastGenLoot = Generators::generateLoot(app.db, app.campaign.partyLevel, true, app.rngState);
                         app.hasGenLoot = true;
+                        app.genViewMode = 0;
                         app.sfx.play(SFX_NAT20);
+                    } else if (Rect{6.0f, 164.0f, 98.0f, 42.0f}.contains(tx, ty)) {
+                        app.lastGenTavern = Generators::generateTavern(app.rngState);
+                        app.hasGenTavern = true;
+                        app.genViewMode = 1;
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{111.0f, 164.0f, 98.0f, 42.0f}.contains(tx, ty)) {
+                        app.lastGenHook = Generators::generateQuestHook(app.rngState);
+                        app.hasGenHook = true;
+                        app.genViewMode = 2;
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{216.0f, 164.0f, 98.0f, 42.0f}.contains(tx, ty)) {
+                        app.lastGenShop = Generators::generateShop(app.db, app.campaign.partyLevel, app.rngState);
+                        app.hasGenShop = true;
+                        app.genViewMode = 3;
+                        app.sfx.play(SFX_TAP);
                     }
                 } else if (app.toolsSubTab == 2) {
+                    if (Rect{6.0f, 62.0f, 48.0f, 34.0f}.contains(tx, ty)) {
+                        if (app.campaign.sessionNumber > 1) --app.campaign.sessionNumber;
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{58.0f, 62.0f, 48.0f, 34.0f}.contains(tx, ty)) {
+                        if (app.campaign.sessionNumber < 999) ++app.campaign.sessionNumber;
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{110.0f, 62.0f, 54.0f, 34.0f}.contains(tx, ty)) {
+                        if (app.campaign.dayNumber < 9999) ++app.campaign.dayNumber;
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{168.0f, 62.0f, 66.0f, 34.0f}.contains(tx, ty)) {
+                        app.campaign.timeSlot = static_cast<uint8_t>((app.campaign.timeSlot + 1) % 5);
+                        if (app.campaign.timeSlot == 0 && app.campaign.dayNumber < 9999) {
+                            ++app.campaign.dayNumber;
+                        }
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{238.0f, 62.0f, 76.0f, 34.0f}.contains(tx, ty)) {
+                        app.campaign.weather = Generators::rollWeather(app.rngState);
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.sfx.play(SFX_DICE_ROLL);
+                        app.setStatus(std::string("Weather: ") + Generators::weatherToString(app.campaign.weather));
+                    } else if (Rect{6.0f, 102.0f, 150.0f, 30.0f}.contains(tx, ty)) {
+                        app.campJournalMode = 0;
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{164.0f, 102.0f, 150.0f, 30.0f}.contains(tx, ty)) {
+                        app.campJournalMode = 1;
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{6.0f, 138.0f, 64.0f, 36.0f}.contains(tx, ty)) {
+                        if (app.campJournalMode == 0 && !app.campaign.notes.empty()) {
+                            int n = static_cast<int>(app.campaign.notes.size());
+                            app.campNoteCursor = (app.campNoteCursor + n - 1) % n;
+                        } else if (app.campJournalMode == 1 && !app.campaign.savedNpcs.empty()) {
+                            int n = static_cast<int>(app.campaign.savedNpcs.size());
+                            app.campNpcCursor = (app.campNpcCursor + n - 1) % n;
+                        }
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{74.0f, 138.0f, 64.0f, 36.0f}.contains(tx, ty)) {
+                        if (app.campJournalMode == 0 && !app.campaign.notes.empty()) {
+                            app.campNoteCursor = (app.campNoteCursor + 1) % static_cast<int>(app.campaign.notes.size());
+                        } else if (app.campJournalMode == 1 && !app.campaign.savedNpcs.empty()) {
+                            app.campNpcCursor = (app.campNpcCursor + 1) % static_cast<int>(app.campaign.savedNpcs.size());
+                        }
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{142.0f, 138.0f, 104.0f, 36.0f}.contains(tx, ty)) {
+                        if (app.campJournalMode == 0) {
+                            std::string ntext;
+                            if (openSystemKeyboard(ntext, 80, "Session Note")) {
+                                app.campaign.notes.insert(app.campaign.notes.begin(),
+                                                          CampaignNote{app.campaign.sessionNumber, ntext});
+                                if (app.campaign.notes.size() > 64) app.campaign.notes.resize(64);
+                                app.campNoteCursor = 0;
+                                app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                                app.sfx.play(SFX_TAP);
+                                app.setStatus("Added session note.");
+                            }
+                        } else if (!app.campaign.savedNpcs.empty()) {
+                            int idx = std::clamp(app.campNpcCursor, 0, static_cast<int>(app.campaign.savedNpcs.size()) - 1);
+                            if (openSystemKeyboard(app.campaign.savedNpcs[static_cast<size_t>(idx)].note, 64, "NPC DM Note")) {
+                                app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                                app.sfx.play(SFX_TAP);
+                                app.setStatus("Updated NPC note.");
+                            }
+                        }
+                    } else if (Rect{250.0f, 138.0f, 64.0f, 36.0f}.contains(tx, ty)) {
+                        if (app.campJournalMode == 0 && !app.campaign.notes.empty()) {
+                            int idx = std::clamp(app.campNoteCursor, 0, static_cast<int>(app.campaign.notes.size()) - 1);
+                            app.campaign.notes.erase(app.campaign.notes.begin() + idx);
+                            app.campNoteCursor = std::max(0, std::min(app.campNoteCursor, static_cast<int>(app.campaign.notes.size()) - 1));
+                            app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                            app.sfx.play(SFX_TAP);
+                            app.setStatus("Deleted note.");
+                        } else if (app.campJournalMode == 1 && !app.campaign.savedNpcs.empty()) {
+                            int idx = std::clamp(app.campNpcCursor, 0, static_cast<int>(app.campaign.savedNpcs.size()) - 1);
+                            app.campaign.savedNpcs.erase(app.campaign.savedNpcs.begin() + idx);
+                            app.campNpcCursor = std::max(0, std::min(app.campNpcCursor, static_cast<int>(app.campaign.savedNpcs.size()) - 1));
+                            app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                            app.sfx.play(SFX_TAP);
+                            app.setStatus("Removed saved NPC.");
+                        }
+                    } else if (Rect{6.0f, 180.0f, 308.0f, 40.0f}.contains(tx, ty)) {
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.sfx.play(SFX_NAT20);
+                        app.setStatus("Campaign log saved to SD!");
+                    }
+                } else if (app.toolsSubTab == 3) {
                     if (Rect{6.0f, 62.0f, 100.0f, 26.0f}.contains(tx, ty)) {
                         app.hbIsSpell = false;
                         app.hbEditIdx = -1;
@@ -1996,8 +2486,16 @@ int main(int argc, char** argv) {
                     } else if (Rect{210.0f, 62.0f, 54.0f, 26.0f}.contains(tx, ty)) {
                         if (!app.hbIsSpell) {
                             const auto& list = app.db.homebrewMonsters();
-                            if (!list.empty()) {
-                                app.hbEditIdx = (app.hbEditIdx + 1) % static_cast<int>(list.size());
+                            std::vector<int> onDevIndices;
+                            for (size_t i = 0; i < list.size(); ++i) {
+                                if (list[i].fromOnDevice) onDevIndices.push_back(static_cast<int>(i));
+                            }
+                            if (!onDevIndices.empty()) {
+                                auto it = std::find(onDevIndices.begin(), onDevIndices.end(), app.hbEditIdx);
+                                int nextPos = (it == onDevIndices.end())
+                                                  ? 0
+                                                  : static_cast<int>((it - onDevIndices.begin() + 1) % static_cast<ptrdiff_t>(onDevIndices.size()));
+                                app.hbEditIdx = onDevIndices[static_cast<size_t>(nextPos)];
                                 const auto& m = list[static_cast<size_t>(app.hbEditIdx)];
                                 app.hbName = m.name;
                                 app.hbAc   = static_cast<int>(m.armorClass);
@@ -2007,33 +2505,52 @@ int main(int argc, char** argv) {
                                     app.hbActionName = m.actions[0].name;
                                     app.hbDesc       = m.actions[0].fullDesc;
                                 }
-                                app.setStatus("Loaded custom monster.");
+                                app.setStatus("Loaded on-device monster.");
                             } else {
-                                app.setStatus("No custom monsters saved.");
+                                app.setStatus("No on-device monsters saved.");
                             }
                         } else {
                             const auto& list = app.db.homebrewSpells();
-                            if (!list.empty()) {
-                                app.hbEditIdx = (app.hbEditIdx + 1) % static_cast<int>(list.size());
+                            std::vector<int> onDevIndices;
+                            for (size_t i = 0; i < list.size(); ++i) {
+                                if (list[i].fromOnDevice) onDevIndices.push_back(static_cast<int>(i));
+                            }
+                            if (!onDevIndices.empty()) {
+                                auto it = std::find(onDevIndices.begin(), onDevIndices.end(), app.hbEditIdx);
+                                int nextPos = (it == onDevIndices.end())
+                                                  ? 0
+                                                  : static_cast<int>((it - onDevIndices.begin() + 1) % static_cast<ptrdiff_t>(onDevIndices.size()));
+                                app.hbEditIdx = onDevIndices[static_cast<size_t>(nextPos)];
                                 const auto& s = list[static_cast<size_t>(app.hbEditIdx)];
                                 app.hbName       = s.name;
                                 app.hbSpellLevel = static_cast<int>(s.level);
                                 app.hbDesc       = s.body;
-                                app.setStatus("Loaded custom spell.");
+                                app.setStatus("Loaded on-device spell.");
                             } else {
-                                app.setStatus("No custom spells saved.");
+                                app.setStatus("No on-device spells saved.");
                             }
                         }
                         app.sfx.play(SFX_TAP);
                     } else if (Rect{268.0f, 62.0f, 46.0f, 26.0f}.contains(tx, ty)) {
                         bool deleted = false;
                         if (app.hbEditIdx >= 0) {
-                            if (!app.hbIsSpell) {
+                            if (!app.hbIsSpell && static_cast<size_t>(app.hbEditIdx) < app.db.homebrewMonsters().size()) {
+                                uint16_t delId = app.db.homebrewMonsters()[static_cast<size_t>(app.hbEditIdx)].id;
                                 deleted = app.db.deleteHomebrewMonster(static_cast<size_t>(app.hbEditIdx), app.campaignMgr.homebrewDir().c_str());
-                                if (deleted) app.refreshMonsterSearch();
-                            } else {
+                                if (deleted) {
+                                    app.remapDeletedHomebrewId(CAT_MONSTER, delId);
+                                    app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                                    app.saveUserSettings();
+                                    app.refreshMonsterSearch();
+                                }
+                            } else if (app.hbIsSpell && static_cast<size_t>(app.hbEditIdx) < app.db.homebrewSpells().size()) {
+                                uint16_t delId = app.db.homebrewSpells()[static_cast<size_t>(app.hbEditIdx)].id;
                                 deleted = app.db.deleteHomebrewSpell(static_cast<size_t>(app.hbEditIdx), app.campaignMgr.homebrewDir().c_str());
-                                if (deleted) app.refreshRuleSearch();
+                                if (deleted) {
+                                    app.remapDeletedHomebrewId(CAT_SPELL, delId);
+                                    app.saveUserSettings();
+                                    app.refreshRuleSearch();
+                                }
                             }
                         }
                         app.hbEditIdx = -1;
@@ -2076,14 +2593,14 @@ int main(int argc, char** argv) {
                             act.summary  = app.hbDesc.substr(0, 72);
                             act.fullDesc = app.hbDesc;
                             m.actions.push_back(act);
-                            ok = app.db.saveHomebrewMonster(m, app.campaignMgr.homebrewDir().c_str());
+                            ok = app.db.saveHomebrewMonster(m, app.campaignMgr.homebrewDir().c_str(), app.hbEditIdx);
                             app.refreshMonsterSearch();
                         } else {
                             HomebrewSpell s;
                             s.name  = app.hbName;
                             s.level = static_cast<uint8_t>(app.hbSpellLevel);
                             s.body  = app.hbDesc;
-                            ok = app.db.saveHomebrewSpell(s, app.campaignMgr.homebrewDir().c_str());
+                            ok = app.db.saveHomebrewSpell(s, app.campaignMgr.homebrewDir().c_str(), app.hbEditIdx);
                             app.refreshRuleSearch();
                         }
                         if (ok) {
@@ -2093,8 +2610,8 @@ int main(int argc, char** argv) {
                             app.setStatus("Failed to save Homebrew entry.");
                         }
                     }
-                } else if (app.toolsSubTab == 3) {
-                    if (Rect{6.0f, 62.0f, 72.0f, 32.0f}.contains(tx, ty) && app.campaign.party.size() < 8) {
+                } else if (app.toolsSubTab == 4) {
+                    if (Rect{6.0f, 62.0f, 72.0f, 30.0f}.contains(tx, ty) && app.campaign.party.size() < 8) {
                         std::string hname = "New Hero";
                         if (openSystemKeyboard(hname, 24, "Hero Name")) {
                             PartyMember pm;
@@ -2104,25 +2621,26 @@ int main(int argc, char** argv) {
                             pm.ac        = 14;
                             pm.maxHp     = 10 + static_cast<int>(pm.level) * 6;
                             pm.currentHp = pm.maxHp;
+                            pm.passivePerception = 12;
                             pm.active    = true;
                             app.campaign.party.push_back(pm);
                             app.partySelectedIdx = static_cast<int>(app.campaign.party.size()) - 1;
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                             app.sfx.play(SFX_TAP);
                         }
-                    } else if (Rect{82.0f, 62.0f, 74.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{82.0f, 62.0f, 74.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         if (openSystemKeyboard(p.name, 24, "Rename Hero")) {
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                             app.sfx.play(SFX_TAP);
                         }
-                    } else if (Rect{160.0f, 62.0f, 74.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{160.0f, 62.0f, 74.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         if (openSystemKeyboard(p.className, 16, "Hero Class")) {
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                             app.sfx.play(SFX_TAP);
                         }
-                    } else if (Rect{238.0f, 62.0f, 76.0f, 32.0f}.contains(tx, ty)) {
+                    } else if (Rect{238.0f, 62.0f, 76.0f, 30.0f}.contains(tx, ty)) {
                         int count = app.campaignMgr.importPartyCharacters(app.campaign);
                         if (count > 0) {
                             app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
@@ -2134,46 +2652,54 @@ int main(int argc, char** argv) {
                             app.sfx.play(SFX_TAP);
                             app.setStatus("No .json files in /party/ folder.");
                         }
-                    } else if (Rect{6.0f, 98.0f, 48.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{6.0f, 96.0f, 48.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         p.ac = static_cast<uint8_t>(std::max(5, static_cast<int>(p.ac) - 1));
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{58.0f, 98.0f, 48.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{58.0f, 96.0f, 48.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         p.ac = static_cast<uint8_t>(std::min(30, static_cast<int>(p.ac) + 1));
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{110.0f, 98.0f, 48.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{110.0f, 96.0f, 48.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         p.initBonus = static_cast<int8_t>(std::max(-5, static_cast<int>(p.initBonus) - 1));
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{162.0f, 98.0f, 48.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{162.0f, 96.0f, 48.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         p.initBonus = static_cast<int8_t>(std::min(15, static_cast<int>(p.initBonus) + 1));
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{214.0f, 98.0f, 48.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{214.0f, 96.0f, 48.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         p.maxHp = std::max(1, p.maxHp - 5);
                         p.currentHp = std::min(p.currentHp, p.maxHp);
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{266.0f, 98.0f, 48.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{266.0f, 96.0f, 48.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         p.maxHp = std::min(999, p.maxHp + 5);
                         p.currentHp = p.maxHp;
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{6.0f, 134.0f, 48.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{6.0f, 130.0f, 44.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         p.level = static_cast<uint8_t>(std::max(1, static_cast<int>(p.level) - 1));
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{58.0f, 134.0f, 48.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{54.0f, 130.0f, 44.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         p.level = static_cast<uint8_t>(std::min(20, static_cast<int>(p.level) + 1));
                         app.sfx.play(SFX_TAP);
-                    } else if (Rect{110.0f, 134.0f, 96.0f, 32.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                    } else if (Rect{102.0f, 130.0f, 44.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                        auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
+                        p.passivePerception = static_cast<uint8_t>(std::max(1, static_cast<int>(p.passivePerception) - 1));
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{150.0f, 130.0f, 44.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
+                        auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
+                        p.passivePerception = static_cast<uint8_t>(std::min(35, static_cast<int>(p.passivePerception) + 1));
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{198.0f, 130.0f, 70.0f, 30.0f}.contains(tx, ty) && !app.campaign.party.empty()) {
                         auto& p = app.campaign.party[static_cast<size_t>(app.partySelectedIdx)];
                         p.active = !p.active;
                         app.sfx.play(SFX_TAP);
                         app.setStatus(p.active ? "Hero set Active." : "Hero Benched.");
-                    } else if (Rect{210.0f, 134.0f, 50.0f, 32.0f}.contains(tx, ty) && app.campaign.party.size() > 1) {
+                    } else if (Rect{272.0f, 130.0f, 42.0f, 30.0f}.contains(tx, ty) && app.campaign.party.size() > 1) {
                         app.campaign.party.erase(app.campaign.party.begin() + app.partySelectedIdx);
                         if (app.partySelectedIdx >= static_cast<int>(app.campaign.party.size())) {
                             app.partySelectedIdx = static_cast<int>(app.campaign.party.size()) - 1;
@@ -2181,22 +2707,28 @@ int main(int argc, char** argv) {
                         app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                         app.sfx.play(SFX_TAP);
                         app.setStatus("Removed hero from party.");
-                    } else if (Rect{264.0f, 134.0f, 50.0f, 32.0f}.contains(tx, ty)) {
+                    } else if (Rect{6.0f, 164.0f, 76.0f, 32.0f}.contains(tx, ty)) {
+                        app.performShortRest();
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.sfx.play(SFX_TAP);
+                        app.setStatus("Short Rest: Active party patched up!");
+                    } else if (Rect{86.0f, 164.0f, 76.0f, 32.0f}.contains(tx, ty)) {
+                        app.performLongRest();
+                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
+                        app.sfx.play(SFX_NAT20);
+                        app.setStatus("Long Rest: Active party fully healed!");
+                    } else if (Rect{166.0f, 164.0f, 46.0f, 32.0f}.contains(tx, ty)) {
+                        app.campaign.partyLevel = static_cast<uint8_t>(std::max(1, static_cast<int>(app.campaign.partyLevel) - 1));
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{216.0f, 164.0f, 46.0f, 32.0f}.contains(tx, ty)) {
+                        app.campaign.partyLevel = static_cast<uint8_t>(std::min(20, static_cast<int>(app.campaign.partyLevel) + 1));
+                        app.sfx.play(SFX_TAP);
+                    } else if (Rect{266.0f, 164.0f, 48.0f, 32.0f}.contains(tx, ty)) {
                         app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
                         app.sfx.play(SFX_TAP);
                         app.setStatus("Party saved to SD!");
-                    } else if (Rect{6.0f, 172.0f, 74.0f, 30.0f}.contains(tx, ty)) {
-                        app.campaign.partyLevel = static_cast<uint8_t>(std::max(1, static_cast<int>(app.campaign.partyLevel) - 1));
-                        app.sfx.play(SFX_TAP);
-                    } else if (Rect{84.0f, 172.0f, 74.0f, 30.0f}.contains(tx, ty)) {
-                        app.campaign.partyLevel = static_cast<uint8_t>(std::min(20, static_cast<int>(app.campaign.partyLevel) + 1));
-                        app.sfx.play(SFX_TAP);
-                    } else if (Rect{162.0f, 172.0f, 152.0f, 30.0f}.contains(tx, ty)) {
-                        app.campaignMgr.saveCampaign(app.campaign, &app.tracker);
-                        app.sfx.play(SFX_TAP);
-                        app.setStatus("Campaign saved to SD!");
                     }
-                } else if (app.toolsSubTab == 4) {
+                } else if (app.toolsSubTab == 5) {
                     int totalCamps = static_cast<int>(app.campaigns.size());
                     int totalPages = std::max(1, (totalCamps + 2) / 3);
                     int page = std::clamp(app.campaignListPage, 0, totalPages - 1);
@@ -2209,6 +2741,10 @@ int main(int argc, char** argv) {
                             app.campaignMgr.loadCampaign(app.campaigns[static_cast<size_t>(idx)].slug, app.campaign, &app.tracker);
                             app.partySelectedIdx = 0;
                             app.fightEncPage = 0;
+                            app.campNoteCursor = 0;
+                            app.campNpcCursor = 0;
+                            app.editingEncounterIdx = -1;
+                            app.showLegalInfo = false;
                             app.saveUserSettings();
                             app.sfx.play(SFX_TAP);
                             app.setStatus("Switched campaign.");
@@ -2217,16 +2753,17 @@ int main(int argc, char** argv) {
                         y += 35.0f;
                     }
                     bool newTapped = (totalPages > 1)
-                        ? Rect{78.0f, 174.0f, 114.0f, 40.0f}.contains(tx, ty)
-                        : Rect{6.0f, 174.0f, 180.0f, 40.0f}.contains(tx, ty);
+                        ? Rect{70.0f, 174.0f, 82.0f, 40.0f}.contains(tx, ty)
+                        : Rect{6.0f, 174.0f, 134.0f, 40.0f}.contains(tx, ty);
                     bool sndTapped = (totalPages > 1)
-                        ? Rect{196.0f, 174.0f, 118.0f, 40.0f}.contains(tx, ty)
-                        : Rect{192.0f, 174.0f, 122.0f, 40.0f}.contains(tx, ty);
+                        ? Rect{156.0f, 174.0f, 94.0f, 40.0f}.contains(tx, ty)
+                        : Rect{144.0f, 174.0f, 106.0f, 40.0f}.contains(tx, ty);
+                    bool legalTapped = Rect{254.0f, 174.0f, 60.0f, 40.0f}.contains(tx, ty);
 
-                    if (totalPages > 1 && Rect{6.0f, 174.0f, 32.0f, 40.0f}.contains(tx, ty)) {
+                    if (totalPages > 1 && Rect{6.0f, 174.0f, 28.0f, 40.0f}.contains(tx, ty)) {
                         app.campaignListPage = (page + totalPages - 1) % totalPages;
                         app.sfx.play(SFX_TAP);
-                    } else if (totalPages > 1 && Rect{42.0f, 174.0f, 32.0f, 40.0f}.contains(tx, ty)) {
+                    } else if (totalPages > 1 && Rect{38.0f, 174.0f, 28.0f, 40.0f}.contains(tx, ty)) {
                         app.campaignListPage = (page + 1) % totalPages;
                         app.sfx.play(SFX_TAP);
                     } else if (newTapped) {
@@ -2237,6 +2774,9 @@ int main(int argc, char** argv) {
                             app.tracker.clear();
                             app.campaigns = app.campaignMgr.listCampaigns();
                             app.fightEncPage = 0;
+                            app.campNoteCursor = 0;
+                            app.campNpcCursor = 0;
+                            app.editingEncounterIdx = -1;
                             app.saveUserSettings();
                             app.setStatus("Created campaign.");
                         }
@@ -2246,6 +2786,9 @@ int main(int argc, char** argv) {
                         app.saveUserSettings();
                         if (app.soundEnabled) app.sfx.play(SFX_TAP);
                         app.setStatus(app.soundEnabled ? "Sound enabled." : "Sound muted.");
+                    } else if (legalTapped) {
+                        app.showLegalInfo = !app.showLegalInfo;
+                        app.sfx.play(SFX_TAP);
                     }
                 }
             }

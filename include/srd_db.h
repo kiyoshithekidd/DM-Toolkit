@@ -154,8 +154,8 @@ public:
     bool loadFromFile(const char* path);
     int  loadHomebrewDir(const char* dirPath);
     int  reloadHomebrewDir(const char* dirPath);
-    bool saveHomebrewMonster(const HomebrewMonster& mon, const char* homebrewDir);
-    bool saveHomebrewSpell(const HomebrewSpell& sp, const char* homebrewDir);
+    bool saveHomebrewMonster(const HomebrewMonster& mon, const char* homebrewDir, int editIdx = -1);
+    bool saveHomebrewSpell(const HomebrewSpell& sp, const char* homebrewDir, int editIdx = -1);
     bool deleteHomebrewMonster(size_t hbIdx, const char* homebrewDir);
     bool deleteHomebrewSpell(size_t hbIdx, const char* homebrewDir);
     const std::vector<HomebrewMonster>& homebrewMonsters() const { return hbMonsters_; }

@@ -13,6 +13,8 @@
 
 namespace dmtk {
 
+constexpr const char* APP_VERSION = "v1.6.0";
+
 enum AppMode : uint8_t {
     MODE_FIGHT  = 0,
     MODE_MANUAL = 1,
@@ -52,17 +54,19 @@ struct AppState {
     int               diceMod      = 0;
     RollAdvantageMode diceAdvMode  = ROLL_NORMAL;
 
-    // Custom HP Numpad buffer
+    // Custom HP Numpad buffer & Half/x2 multiplier (0=x1, 1=Half, 2=x2)
     int customHpValue = 0;
+    int customHpMult  = 0;
 
     // Encounter Builder draft
     SavedEncounter draftEncounter;
-    int            draftSelectedIdx = 0;
-    bool           encBuilderView   = false;
+    int            draftSelectedIdx    = 0;
+    int            editingEncounterIdx = -1; // >= 0 when editing an existing saved encounter
+    bool           encBuilderView      = false;
 
-    // On-Device Homebrew Creator draft (Issue #9, #33)
+    // On-Device Homebrew Creator draft (Issue #9, #33, #43, #44)
     bool        hbIsSpell    = false;
-    int         hbEditIdx    = -1; // -1 = new draft, >= 0 = index in on-device homebrew list
+    int         hbEditIdx    = -1; // -1 = new draft, >= 0 = index in hbMonsters_/hbSpells_ (on-device)
     std::string hbName       = "Shadow Hound";
     int         hbAc         = 14;
     int         hbHp         = 28;
@@ -99,19 +103,31 @@ struct AppState {
     bool combatRulesDrawerOpen = false;
     int  drawerRuleIndex       = 0;
 
-    // Tools & Campaign state (0=Enc, 1=Gen, 2=Brew, 3=Party, 4=Saves, 5=Legal)
+    // Tools & Campaign state (0=Enc, 1=Gen, 2=Camp, 3=Brew, 4=Party, 5=Saves)
     int                 toolsSubTab      = 0;
     int                 partySelectedIdx = 0;
     int                 fightEncPage     = 0;
     int                 campaignListPage = 0;
+    int                 campJournalMode  = 0; // 0 = Notes, 1 = Saved NPCs
+    int                 campNoteCursor   = 0;
+    int                 campNpcCursor    = 0;
+    bool                showLegalInfo    = false;
+
     TerrainType         genTerrain       = TERRAIN_FOREST;
     EncounterDifficulty genDifficulty    = DIFF_MEDIUM;
+    int                 genViewMode      = 0; // 0=NPC/Loot, 1=Tavern, 2=Hook, 3=Shop
     SavedEncounter      lastGenEncounter;
     GeneratedNpc        lastGenNpc;
     GeneratedLoot       lastGenLoot;
+    GeneratedTavern     lastGenTavern;
+    GeneratedQuestHook  lastGenHook;
+    GeneratedShop       lastGenShop;
     bool                hasGenEncounter  = false;
     bool                hasGenNpc        = false;
     bool                hasGenLoot       = false;
+    bool                hasGenTavern     = false;
+    bool                hasGenHook       = false;
+    bool                hasGenShop       = false;
 
     std::string statusBanner;
     int         statusFrames = 0;
@@ -119,6 +135,76 @@ struct AppState {
     void setStatus(const std::string& msg, int frames = 120) {
         statusBanner = msg;
         statusFrames = frames;
+    }
+
+    int activePartyCount() const {
+        int n = 0;
+        for (const auto& p : campaign.party) {
+            if (p.active) ++n;
+        }
+        return std::max(1, n);
+    }
+
+    void performLongRest() {
+        for (auto& p : campaign.party) {
+            if (p.active) {
+                p.currentHp = p.maxHp;
+            }
+        }
+        for (auto& c : tracker.combatantsMut()) {
+            if (c.isPlayer) {
+                c.currentHp      = c.maxHp;
+                c.tempHp         = 0;
+                c.conditionsMask = 0;
+                c.concentrating  = false;
+                c.deathSuccesses = 0;
+                c.deathFailures  = 0;
+                c.stabilized     = false;
+            }
+        }
+    }
+
+    void performShortRest() {
+        for (auto& p : campaign.party) {
+            if (p.active && p.currentHp < p.maxHp) {
+                int heal = std::max(4, p.maxHp / 2);
+                p.currentHp = std::min(p.maxHp, p.currentHp + heal);
+            }
+        }
+    }
+
+    void remapDeletedHomebrewId(uint8_t cat, uint16_t deletedId) {
+        // Update pinnedEntries
+        pinnedEntries.erase(
+            std::remove_if(pinnedEntries.begin(), pinnedEntries.end(),
+                           [cat, deletedId](uint32_t k) {
+                               return (k >> 16) == cat && static_cast<uint16_t>(k & 0xFFFFu) == deletedId;
+                           }),
+            pinnedEntries.end());
+        for (uint32_t& k : pinnedEntries) {
+            if ((k >> 16) == cat) {
+                uint16_t id = static_cast<uint16_t>(k & 0xFFFFu);
+                if (id > deletedId) {
+                    k = pinKey(cat, static_cast<uint16_t>(id - 1));
+                }
+            }
+        }
+        if (cat == CAT_MONSTER) {
+            auto remapSlots = [deletedId](std::vector<EncounterSlot>& slots) {
+                slots.erase(
+                    std::remove_if(slots.begin(), slots.end(),
+                                   [deletedId](const EncounterSlot& s) { return s.monsterId == deletedId; }),
+                    slots.end());
+                for (auto& s : slots) {
+                    if (s.monsterId > deletedId && s.monsterId >= HOMEBREW_MONSTER_ID_BASE) {
+                        --s.monsterId;
+                    }
+                }
+            };
+            for (auto& enc : campaign.encounters) remapSlots(enc.slots);
+            remapSlots(draftEncounter.slots);
+            tracker.remapDeletedHomebrewMonster(deletedId);
+        }
     }
 
     static uint32_t pinKey(uint8_t cat, uint16_t id) {

@@ -33,6 +33,26 @@ struct GeneratedLoot {
     std::string              summary;
 };
 
+struct GeneratedTavern {
+    std::string name;
+    std::string vibe;
+    std::string specialty;
+    std::string rumor;
+};
+
+struct GeneratedQuestHook {
+    std::string title;
+    std::string patron;
+    std::string hook;
+    std::string twist;
+};
+
+struct GeneratedShop {
+    std::string              name;
+    std::string              shopkeeper;
+    std::vector<std::string> stock;
+};
+
 struct EncounterDifficultyEval {
     uint32_t            baseXp       = 0;
     uint32_t            adjustedXp   = 0;
@@ -47,6 +67,10 @@ struct EncounterDifficultyEval {
 class Generators {
 public:
     static const char* difficultyToString(EncounterDifficulty diff);
+    static const char* timeSlotToString(uint8_t slot);
+    static const char* weatherToString(uint8_t weather);
+    static uint8_t     rollWeather(uint32_t& rngState);
+    static float       encounterMultiplier(int totalMonsters, int partySize);
 
     static EncounterDifficultyEval evaluateEncounterDifficulty(const SrdDatabase& db,
                                                                const SavedEncounter& enc,
@@ -66,6 +90,10 @@ public:
                                       int tierCr,
                                       bool isHoard,
                                       uint32_t& rngState);
+
+    static GeneratedTavern    generateTavern(uint32_t& rngState);
+    static GeneratedQuestHook generateQuestHook(uint32_t& rngState);
+    static GeneratedShop      generateShop(const SrdDatabase& db, int partyLevel, uint32_t& rngState);
 
 private:
     static uint32_t nextRand(uint32_t& rngState);
